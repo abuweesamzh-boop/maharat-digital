@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>مهارات ديجيتال | لوحة التحكم</title>
+<link rel="stylesheet" href="css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div class="pixel-field"></div>
+
+<div class="app-shell">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">مهارات <span>ديجيتال</span></div>
+    <div class="role-tag" id="roleTag">جاري التحميل...</div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">الرئيسية</div>
+      <div class="nav-link active" data-section="home"><span class="ico">🏠</span> نظرة عامة</div>
+    </div>
+
+    <div class="nav-group" id="teacherNav">
+      <div class="nav-group-title">المحتوى</div>
+      <div class="nav-link" data-section="portfolio"><span class="ico">📁</span> ملف إنجاز المعلم</div>
+      <div class="nav-link" data-section="tracking"><span class="ico">📋</span> سجل متابعة الطلاب</div>
+      <div class="nav-link" data-section="presentations"><span class="ico">🖥️</span> العروض التقديمية</div>
+      <div class="nav-link" data-section="exams"><span class="ico">📝</span> الاختبارات</div>
+      <div class="nav-link" data-section="students"><span class="ico">🎓</span> بيانات الطلاب</div>
+    </div>
+
+    <div class="logout" id="logoutBtn">🚪 تسجيل الخروج</div>
+  </aside>
+
+  <main class="main-area">
+    <div class="topbar">
+      <button class="hamburger" id="hamburger">☰</button>
+      <h1 id="pageTitle">نظرة عامة</h1>
+      <div class="user-chip">
+        <div class="avatar" id="userAvatar">؟</div>
+        <span id="userName">جاري التحميل...</span>
+      </div>
+    </div>
+
+    <div id="contentArea">
+      <!-- المحتوى يُبنى ديناميكياً حسب القسم -->
+    </div>
+  </main>
+
+</div>
+
+<script src="js/supabaseClient.js"></script>
+<script src="js/dashboard.js"></script>
+</body>
+</html>

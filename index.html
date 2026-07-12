@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>مهارات ديجيتال | تسجيل الدخول</title>
+<link rel="stylesheet" href="css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div class="pixel-field"></div>
+
+<div class="login-wrap">
+
+  <div class="brand-panel">
+    <div class="brand-badge"><span class="dot"></span> منصة تعليمية</div>
+    <h1>مهارات <span>ديجيتال</span></h1>
+    <p>الموقع الرسمي لمادة المهارات الرقمية — ملف إنجاز المعلم، سجل متابعة الطلاب، العروض التقديمية، والاختبارات، كل شي بمكان واحد.</p>
+
+    <div class="role-strip">
+      <div class="role-chip">🧑‍🏫 <b>معلم</b></div>
+      <div class="role-chip">🎓 <b>طالب</b></div>
+      <div class="role-chip">🧭 <b>مشرف</b></div>
+    </div>
+  </div>
+
+  <div class="form-panel">
+    <div class="login-card">
+      <h2>تسجيل الدخول</h2>
+      <p class="sub">أدخل بيانات حسابك للمتابعة</p>
+
+      <div class="error-msg" id="errorBox"></div>
+
+      <form id="loginForm">
+        <div class="field">
+          <label>البريد الإلكتروني / اسم المستخدم</label>
+          <input type="text" id="emailInput" placeholder="example@school.com" required />
+        </div>
+        <div class="field">
+          <label>كلمة المرور</label>
+          <input type="password" id="passwordInput" placeholder="••••••••" required />
+        </div>
+        <button type="submit" class="btn-primary" id="loginBtn">دخول</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
+</body>
+</html>
