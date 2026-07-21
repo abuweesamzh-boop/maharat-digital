@@ -112,6 +112,8 @@ document.querySelectorAll(".nav-link").forEach((link) => {
     if (section === "home") {
       document.getElementById("pageTitle").textContent = "نظرة عامة";
       loadHomeStats();
+    } else if (section === "portfolio") {
+      renderPortfolioSection();
     } else {
       renderComingSoon(link.textContent.trim());
     }

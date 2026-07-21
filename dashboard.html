@@ -51,7 +51,22 @@
 
 </div>
 
+<!-- نافذة منبثقة عامة لإضافة عنصر جديد -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <h3 id="modalTitle">إضافة عنصر</h3>
+    <form id="modalForm">
+      <div id="modalFields"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="modalCancel">إلغاء</button>
+        <button type="submit" class="btn-primary" id="modalSubmit">حفظ</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script src="js/supabaseClient.js"></script>
 <script src="js/dashboard.js"></script>
+<script src="js/portfolio.js"></script>
 </body>
 </html>
