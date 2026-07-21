@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>مهارات ديجيتال | لوحة التحكم</title>
+<title>مهارات رقمية | لوحة التحكم</title>
 <link rel="stylesheet" href="css/style.css" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -14,7 +14,7 @@
 <div class="app-shell">
 
   <aside class="sidebar" id="sidebar">
-    <div class="logo">مهارات <span>ديجيتال</span></div>
+    <div class="logo">مهارات <span>رقمية</span></div>
     <div class="role-tag" id="roleTag">جاري التحميل...</div>
 
     <div class="nav-group">
@@ -28,6 +28,7 @@
       <div class="nav-link" data-section="tracking"><span class="ico">📋</span> سجل متابعة الطلاب</div>
       <div class="nav-link" data-section="presentations"><span class="ico">🖥️</span> العروض التقديمية</div>
       <div class="nav-link" data-section="exams"><span class="ico">📝</span> الاختبارات</div>
+      <div class="nav-link" data-section="worksheets"><span class="ico">🧾</span> أوراق العمل</div>
       <div class="nav-link" data-section="students"><span class="ico">🎓</span> بيانات الطلاب</div>
     </div>
 
@@ -65,8 +66,11 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/dashboard.js"></script>
-<script src="js/portfolio.js"></script>
+<script src="js/content.js"></script>
+<script src="js/students.js"></script>
+<script src="js/tracking.js"></script>
 </body>
 </html>

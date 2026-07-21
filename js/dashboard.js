@@ -76,10 +76,10 @@ async function loadHomeStats() {
 
   if (currentProfile.role === "teacher") {
     const [portfolio, students, presentations, exams] = await Promise.all([
-      supabaseClient.from("teacher_portfolio").select("id", { count: "exact", head: true }),
+      supabaseClient.from("content_items").select("id, content_sections!inner(module)", { count: "exact", head: true }).eq("content_sections.module", "portfolio"),
       supabaseClient.from("students").select("id", { count: "exact", head: true }),
-      supabaseClient.from("presentations").select("id", { count: "exact", head: true }),
-      supabaseClient.from("exams").select("id", { count: "exact", head: true }),
+      supabaseClient.from("content_items").select("id, content_sections!inner(module)", { count: "exact", head: true }).eq("content_sections.module", "presentations"),
+      supabaseClient.from("content_items").select("id, content_sections!inner(module)", { count: "exact", head: true }).eq("content_sections.module", "exams"),
     ]);
 
     const nums = document.querySelectorAll("#statGrid .num");
@@ -114,6 +114,16 @@ document.querySelectorAll(".nav-link").forEach((link) => {
       loadHomeStats();
     } else if (section === "portfolio") {
       renderPortfolioSection();
+    } else if (section === "presentations") {
+      renderPresentationsSection();
+    } else if (section === "exams") {
+      renderExamsSection();
+    } else if (section === "worksheets") {
+      renderWorksheetsSection();
+    } else if (section === "students") {
+      renderStudentsSection();
+    } else if (section === "tracking") {
+      renderTrackingSection();
     } else {
       renderComingSoon(link.textContent.trim());
     }
