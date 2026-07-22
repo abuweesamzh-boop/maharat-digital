@@ -1,18 +1,22 @@
 // ============================================
-// نظام موحّد لثلاث أقسام: ملف الإنجاز / العروض / الاختبارات
+// نظام موحّد: أقسام رئيسية + أقسام فرعية
+// (ملف الإنجاز / العروض / الاختبارات / أوراق العمل)
 // ============================================
 
 const BUCKET_NAME = "maharat-files";
-const SECTION_ICONS = ["📁", "📜", "🏆", "🗄️", "🎖️", "📚", "🌟", "📋", "🖥️", "📝"];
+
+// لوحة ألوان عصرية تتوزع تلقائياً على الأقسام
+const FOLDER_COLORS = ["#2DD8C8", "#F5A623", "#B892FF", "#FF7A8A", "#5FD068", "#5FA8FF", "#FFB74D", "#E879C6"];
 
 let currentModule = null;
-let currentSectionId = null;
+let currentRootSection = null;   // { id, title }
+let currentSubSection = null;    // { id, title } أو null لو نعرض القسم الرئيسي مباشرة
 
 const MODULE_LABELS = {
-  portfolio: { page: "ملف إنجاز المعلم", sectionsTitle: "أقسام ملف الإنجاز", itemsTitle: "مرفقات القسم", showDate: false },
-  presentations: { page: "العروض التقديمية", sectionsTitle: "الوحدات الدراسية", itemsTitle: "عروض الوحدة", showDate: false },
-  exams: { page: "الاختبارات", sectionsTitle: "الوحدات الدراسية", itemsTitle: "اختبارات الوحدة", showDate: true },
-  worksheets: { page: "أوراق العمل", sectionsTitle: "الوحدات الدراسية", itemsTitle: "أوراق عمل الوحدة", showDate: false },
+  portfolio: { page: "ملف إنجاز المعلم", sectionsTitle: "أقسام ملف الإنجاز" },
+  presentations: { page: "العروض التقديمية", sectionsTitle: "الوحدات الدراسية" },
+  exams: { page: "الاختبارات", sectionsTitle: "الوحدات الدراسية" },
+  worksheets: { page: "أوراق العمل", sectionsTitle: "الوحدات الدراسية" },
 };
 
 function renderPortfolioSection() { renderModule("portfolio"); }
@@ -20,67 +24,12 @@ function renderPresentationsSection() { renderModule("presentations"); }
 function renderExamsSection() { renderModule("exams"); }
 function renderWorksheetsSection() { renderModule("worksheets"); }
 
-async function renderModule(moduleName) {
-  currentModule = moduleName;
-  currentSectionId = null;
-  document.getElementById("pageTitle").textContent = MODULE_LABELS[moduleName].page;
-  await loadSectionsList();
+function colorFor(index) {
+  return FOLDER_COLORS[index % FOLDER_COLORS.length];
 }
 
-async function loadSectionsList() {
-  const labels = MODULE_LABELS[currentModule];
-  const contentArea = document.getElementById("contentArea");
-  contentArea.innerHTML = `
-    <div class="section-card">
-      <div class="section-head">
-        <h3>${labels.sectionsTitle}</h3>
-        <button class="btn-add" id="addSectionBtn">+ إضافة قسم جديد</button>
-      </div>
-      <div id="sectionsList" class="stat-grid">
-        <div class="empty-state">جاري التحميل...</div>
-      </div>
-    </div>
-  `;
-
-  document.getElementById("addSectionBtn").addEventListener("click", openAddSectionModal);
-
-  const { data: sections, error } = await supabaseClient
-    .from("content_sections")
-    .select("*")
-    .eq("module", currentModule)
-    .order("created_at", { ascending: true });
-
-  const listEl = document.getElementById("sectionsList");
-
-  if (error) {
-    listEl.innerHTML = `<div class="empty-state">حدث خطأ في تحميل الأقسام</div>`;
-    return;
-  }
-
-  if (!sections || sections.length === 0) {
-    listEl.innerHTML = `
-      <div class="empty-state" style="grid-column:1/-1;">
-        <div class="ico">📁</div>
-        <div>ما فيه أقسام بعد — اضغط "إضافة قسم جديد" للبدء</div>
-      </div>
-    `;
-    return;
-  }
-
-  const counts = await Promise.all(
-    sections.map((s) =>
-      supabaseClient.from("content_items").select("id", { count: "exact", head: true }).eq("section_id", s.id)
-    )
-  );
-
-  listEl.innerHTML = sections.map((s, i) => `
-    <div class="section-card" style="cursor:pointer; position:relative;" onclick="openSection('${s.id}', '${escapeAttr(s.title)}', '${s.icon}')">
-      <button class="icon-btn danger" style="position:absolute; top:12px; left:12px;" onclick="event.stopPropagation(); deleteSection('${s.id}')" title="حذف القسم">🗑️</button>
-      <div style="font-size:32px; margin-bottom:10px;">${s.icon}</div>
-      <div style="font-weight:700; font-size:15px; margin-bottom:4px;">${escapeHtml(s.title)}</div>
-      <div style="font-size:12px; color:var(--text-muted);">${counts[i].count ?? 0} عنصر</div>
-    </div>
-  `).join("");
+function initials(title) {
+  return (title || "?").trim().charAt(0);
 }
 
 function escapeHtml(str) {
@@ -90,38 +39,254 @@ function escapeHtml(str) {
 }
 
 function escapeAttr(str) {
-  return (str || "").replace(/'/g, "\\'");
+  return (str || "").replace(/'/g, "&#39;");
 }
 
-function openAddSectionModal() {
-  document.getElementById("modalTitle").textContent = "إضافة قسم جديد";
-  document.getElementById("modalFields").innerHTML = `
-    <div class="field">
-      <label>اسم القسم</label>
-      <input type="text" id="s_title" required />
+// ============ المستوى الأول: الأقسام الرئيسية ============
+
+async function renderModule(moduleName) {
+  currentModule = moduleName;
+  currentRootSection = null;
+  currentSubSection = null;
+  document.getElementById("pageTitle").textContent = MODULE_LABELS[moduleName].page;
+  await loadRootSections();
+}
+
+async function loadRootSections() {
+  const labels = MODULE_LABELS[currentModule];
+  const contentArea = document.getElementById("contentArea");
+
+  contentArea.innerHTML = `
+    <div class="section-card">
+      <div class="section-head">
+        <h3>${labels.sectionsTitle}</h3>
+        <button class="btn-add" id="addRootBtn">+ إضافة قسم جديد</button>
+      </div>
+      <div id="foldersHolder"><div class="empty-state">جاري التحميل...</div></div>
     </div>
+  `;
+
+  document.getElementById("addRootBtn").addEventListener("click", () => openSectionModal(null));
+
+  const { data: sections, error } = await supabaseClient
+    .from("content_sections")
+    .select("*")
+    .eq("module", currentModule)
+    .is("parent_id", null)
+    .order("created_at", { ascending: true });
+
+  const holder = document.getElementById("foldersHolder");
+
+  if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ في تحميل الأقسام</div>`; return; }
+
+  if (!sections || sections.length === 0) {
+    holder.innerHTML = `<div class="empty-state"><div>ما فيه أقسام بعد — اضغط "إضافة قسم جديد" للبدء</div></div>`;
+    return;
+  }
+
+  const totals = await Promise.all(sections.map((s) => countAggregatedItems(s.id)));
+
+  holder.innerHTML = `<div class="folder-grid">` + sections.map((s, i) => `
+    <div class="folder-card" style="--folder-color:${s.color_index !== null ? colorFor(s.color_index) : colorFor(i)}" onclick="openRootSection('${s.id}', '${escapeAttr(s.title)}')">
+      <button class="folder-delete" onclick="event.stopPropagation(); deleteSectionNode('${s.id}', true)" title="حذف القسم">✕</button>
+      <div class="folder-avatar">${initials(s.title)}</div>
+      <div class="folder-title">${escapeHtml(s.title)}</div>
+      <div class="folder-meta">${totals[i]} عنصر</div>
+    </div>
+  `).join("") + `</div>`;
+}
+
+async function countAggregatedItems(rootId) {
+  const { data: subs } = await supabaseClient.from("content_sections").select("id").eq("parent_id", rootId);
+  const ids = [rootId, ...(subs || []).map((s) => s.id)];
+  const { count } = await supabaseClient.from("content_items").select("id", { count: "exact", head: true }).in("section_id", ids);
+  return count ?? 0;
+}
+
+// ============ فتح القسم الرئيسي: يعرض الأقسام الفرعية + كل العناصر المجمّعة ============
+
+async function openRootSection(id, title) {
+  currentRootSection = { id, title };
+  currentSubSection = null;
+  document.getElementById("pageTitle").textContent = title;
+
+  const contentArea = document.getElementById("contentArea");
+  contentArea.innerHTML = `
+    <div class="breadcrumb-nav">
+      <span class="crumb" onclick="renderModule(currentModule)">${MODULE_LABELS[currentModule].sectionsTitle}</span>
+      <span>/</span>
+      <span class="crumb current">${escapeHtml(title)}</span>
+    </div>
+
+    <div class="section-card" style="margin-bottom:18px;">
+      <div class="section-head">
+        <h3>أقسام فرعية</h3>
+        <div style="display:flex; gap:10px;">
+          <button class="btn-add" id="addSubBtn">+ قسم فرعي</button>
+          <button class="btn-add" id="addRootItemBtn" style="background:var(--accent-cyan); color:#06231F;">+ إضافة عنصر هنا</button>
+        </div>
+      </div>
+      <div id="subfoldersHolder"><div class="empty-state">جاري التحميل...</div></div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-head"><h3>كل العناصر (مجمّعة من كل الأقسام الفرعية)</h3></div>
+      <div id="aggItemsHolder"><div class="empty-state">جاري التحميل...</div></div>
+    </div>
+  `;
+
+  document.getElementById("addSubBtn").addEventListener("click", () => openSectionModal(id));
+  document.getElementById("addRootItemBtn").addEventListener("click", () => openAddItemModal(id, title));
+
+  await loadSubSections(id);
+  await loadAggregatedItems(id);
+}
+
+async function loadSubSections(rootId) {
+  const holder = document.getElementById("subfoldersHolder");
+
+  const { data: subs, error } = await supabaseClient
+    .from("content_sections")
+    .select("*")
+    .eq("parent_id", rootId)
+    .order("created_at", { ascending: true });
+
+  if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
+
+  if (!subs || subs.length === 0) {
+    holder.innerHTML = `<div class="empty-state" style="padding:24px;">ما فيه أقسام فرعية بعد</div>`;
+    return;
+  }
+
+  const counts = await Promise.all(
+    subs.map((s) => supabaseClient.from("content_items").select("id", { count: "exact", head: true }).eq("section_id", s.id))
+  );
+
+  holder.innerHTML = `<div class="folder-grid">` + subs.map((s, i) => `
+    <div class="folder-card" style="--folder-color:${colorFor((s.color_index ?? i) + 3)}" onclick="openSubSection('${s.id}', '${escapeAttr(s.title)}')">
+      <button class="folder-delete" onclick="event.stopPropagation(); deleteSectionNode('${s.id}', false)" title="حذف القسم الفرعي">✕</button>
+      <div class="folder-avatar">${initials(s.title)}</div>
+      <div class="folder-title">${escapeHtml(s.title)}</div>
+      <div class="folder-meta">${counts[i].count ?? 0} عنصر</div>
+    </div>
+  `).join("") + `</div>`;
+}
+
+async function loadAggregatedItems(rootId) {
+  const holder = document.getElementById("aggItemsHolder");
+
+  const { data: subs } = await supabaseClient.from("content_sections").select("id, title").eq("parent_id", rootId);
+  const subMap = {};
+  (subs || []).forEach((s) => (subMap[s.id] = s.title));
+  const ids = [rootId, ...(subs || []).map((s) => s.id)];
+
+  const { data, error } = await supabaseClient
+    .from("content_items")
+    .select("*")
+    .in("section_id", ids)
+    .order("created_at", { ascending: false });
+
+  if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
+
+  if (!data || data.length === 0) {
+    holder.innerHTML = `<div class="empty-state"><div>ما فيه عناصر بعد</div></div>`;
+    return;
+  }
+
+  holder.innerHTML = data.map((item) => `
+    <div class="item-row">
+      <div class="info">
+        <div class="t">${escapeHtml(item.title)} ${item.section_id !== rootId ? `<span class="sub-badge">${escapeHtml(subMap[item.section_id] || "")}</span>` : ""}</div>
+        <div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div>
+      </div>
+      <div class="actions">
+        ${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">👁</a>` : ""}
+        <button class="icon-btn danger" onclick="deleteItem('${item.id}')" title="حذف">✕</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+// ============ فتح قسم فرعي محدد ============
+
+async function openSubSection(id, title) {
+  currentSubSection = { id, title };
+  document.getElementById("pageTitle").textContent = title;
+
+  const contentArea = document.getElementById("contentArea");
+  contentArea.innerHTML = `
+    <div class="breadcrumb-nav">
+      <span class="crumb" onclick="renderModule(currentModule)">${MODULE_LABELS[currentModule].sectionsTitle}</span>
+      <span>/</span>
+      <span class="crumb" onclick="openRootSection('${currentRootSection.id}', '${escapeAttr(currentRootSection.title)}')">${escapeHtml(currentRootSection.title)}</span>
+      <span>/</span>
+      <span class="crumb current">${escapeHtml(title)}</span>
+    </div>
+
+    <div class="section-card">
+      <div class="section-head">
+        <h3>العناصر</h3>
+        <button class="btn-add" id="addSubItemBtn">+ إضافة عنصر</button>
+      </div>
+      <div id="subItemsHolder"><div class="empty-state">جاري التحميل...</div></div>
+    </div>
+  `;
+
+  document.getElementById("addSubItemBtn").addEventListener("click", () => openAddItemModal(id, title));
+  await loadPlainItems(id);
+}
+
+async function loadPlainItems(sectionId) {
+  const holder = document.getElementById("subItemsHolder");
+  const { data, error } = await supabaseClient
+    .from("content_items")
+    .select("*")
+    .eq("section_id", sectionId)
+    .order("created_at", { ascending: false });
+
+  if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
+
+  if (!data || data.length === 0) {
+    holder.innerHTML = `<div class="empty-state"><div>ما فيه عناصر بهذا القسم بعد</div></div>`;
+    return;
+  }
+
+  holder.innerHTML = data.map((item) => `
+    <div class="item-row">
+      <div class="info">
+        <div class="t">${escapeHtml(item.title)}</div>
+        <div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div>
+      </div>
+      <div class="actions">
+        ${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">👁</a>` : ""}
+        <button class="icon-btn danger" onclick="deleteItem('${item.id}')" title="حذف">✕</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+// ============ نافذة إضافة قسم (رئيسي أو فرعي) ============
+
+function openSectionModal(parentId) {
+  document.getElementById("modalTitle").textContent = parentId ? "إضافة قسم فرعي" : "إضافة قسم جديد";
+  document.getElementById("modalFields").innerHTML = `
+    <div class="field"><label>اسم القسم</label><input type="text" id="s_title" required /></div>
     <div class="field">
-      <label>أيقونة القسم</label>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        ${SECTION_ICONS.map((ic, i) => `
-          <label style="cursor:pointer;">
-            <input type="radio" name="s_icon" value="${ic}" ${i === 0 ? "checked" : ""} style="display:none;" class="icon-radio">
-            <span class="icon-choice" style="display:flex; align-items:center; justify-content:center; width:42px; height:42px; border-radius:10px; border:1px solid var(--border-soft); font-size:20px;">${ic}</span>
-          </label>
-        `).join("")}
+      <label>اللون</label>
+      <div class="color-swatch-row" id="colorRow">
+        ${FOLDER_COLORS.map((c, i) => `<div class="color-swatch ${i === 0 ? "selected" : ""}" data-index="${i}" style="background:${c}"></div>`).join("")}
       </div>
     </div>
   `;
 
+  let selectedColor = 0;
   setTimeout(() => {
-    document.querySelectorAll(".icon-radio").forEach((r) => {
-      const span = r.nextElementSibling;
-      if (r.checked) span.style.borderColor = "var(--accent-cyan)";
-      r.addEventListener("change", () => {
-        document.querySelectorAll(".icon-choice").forEach((s) => (s.style.borderColor = "var(--border-soft)"));
-        if (r.checked) span.style.borderColor = "var(--accent-cyan)";
+    document.querySelectorAll(".color-swatch").forEach((sw) => {
+      sw.addEventListener("click", () => {
+        document.querySelectorAll(".color-swatch").forEach((x) => x.classList.remove("selected"));
+        sw.classList.add("selected");
+        selectedColor = parseInt(sw.dataset.index, 10);
       });
-      span.addEventListener("click", () => { r.checked = true; r.dispatchEvent(new Event("change")); });
     });
   }, 0);
 
@@ -134,87 +299,52 @@ function openAddSectionModal() {
     submitBtn.innerHTML = '<span class="loading-spin"></span>';
 
     const title = document.getElementById("s_title").value.trim();
-    const icon = document.querySelector('input[name="s_icon"]:checked').value;
 
-    const { error } = await supabaseClient.from("content_sections").insert({ title, icon, module: currentModule });
+    const { error } = await supabaseClient.from("content_sections").insert({
+      title, module: currentModule, parent_id: parentId, color_index: selectedColor,
+    });
 
     submitBtn.disabled = false;
     submitBtn.textContent = "حفظ";
 
-    if (error) { alert("تعذر إضافة القسم"); return; }
+    if (error) { alert("تعذر الإضافة: " + error.message); return; }
 
     document.getElementById("modalOverlay").classList.remove("show");
-    await loadSectionsList();
+
+    if (parentId) {
+      await loadSubSections(parentId);
+      await loadAggregatedItems(parentId);
+    } else {
+      await loadRootSections();
+    }
   };
 
-  document.getElementById("modalCancel").onclick = () => {
-    document.getElementById("modalOverlay").classList.remove("show");
-  };
+  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
 }
 
-async function deleteSection(sectionId) {
-  if (!confirm("متأكد تبي تحذف هذا القسم؟ سيتم حذف كل العناصر اللي بداخله.")) return;
-  const { error } = await supabaseClient.from("content_sections").delete().eq("id", sectionId);
-  if (error) { alert("تعذر حذف القسم"); return; }
-  await loadSectionsList();
-}
+async function deleteSectionNode(id, isRoot) {
+  const msg = isRoot ? "متأكد تبي تحذف هذا القسم؟ سيتم حذف كل الأقسام الفرعية والعناصر بداخله." : "متأكد تبي تحذف هذا القسم الفرعي؟ سيتم حذف عناصره.";
+  if (!confirm(msg)) return;
 
-async function openSection(sectionId, title, icon) {
-  currentSectionId = sectionId;
-  const labels = MODULE_LABELS[currentModule];
-  document.getElementById("pageTitle").textContent = `${icon} ${title}`;
+  const { error } = await supabaseClient.from("content_sections").delete().eq("id", id);
+  if (error) { alert("تعذر الحذف"); return; }
 
-  const contentArea = document.getElementById("contentArea");
-  contentArea.innerHTML = `
-    <button class="btn-secondary" style="width:auto; padding:8px 16px; margin-bottom:16px;" onclick="renderModule('${currentModule}')">← رجوع للأقسام</button>
-    <div class="section-card">
-      <div class="section-head">
-        <h3>${labels.itemsTitle}</h3>
-        <button class="btn-add" id="addItemBtn">+ إضافة عنصر</button>
-      </div>
-      <div id="itemsList"><div class="empty-state">جاري التحميل...</div></div>
-    </div>
-  `;
-
-  document.getElementById("addItemBtn").addEventListener("click", () => openAddItemModal(sectionId));
-  await loadItems(sectionId);
-}
-
-async function loadItems(sectionId) {
-  const listEl = document.getElementById("itemsList");
-  const { data, error } = await supabaseClient
-    .from("content_items")
-    .select("*")
-    .eq("section_id", sectionId)
-    .order("created_at", { ascending: false });
-
-  if (error) { listEl.innerHTML = `<div class="empty-state">حدث خطأ في تحميل العناصر</div>`; return; }
-
-  if (!data || data.length === 0) {
-    listEl.innerHTML = `<div class="empty-state"><div class="ico">📎</div><div>ما فيه عناصر بهذا القسم بعد</div></div>`;
-    return;
+  if (isRoot) {
+    await loadRootSections();
+  } else {
+    await loadSubSections(currentRootSection.id);
+    await loadAggregatedItems(currentRootSection.id);
   }
-
-  listEl.innerHTML = data.map((item) => `
-    <div class="item-row">
-      <div class="info">
-        <div class="t">${escapeHtml(item.title)}</div>
-        <div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div>
-      </div>
-      <div class="actions">
-        ${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">👁️</a>` : ""}
-        <button class="icon-btn danger" onclick="deleteItem('${item.id}')" title="حذف">🗑️</button>
-      </div>
-    </div>
-  `).join("");
 }
 
-function openAddItemModal(sectionId) {
-  const labels = MODULE_LABELS[currentModule];
-  document.getElementById("modalTitle").textContent = "إضافة عنصر";
+// ============ نافذة إضافة عنصر ============
+
+function openAddItemModal(sectionId, sectionTitle) {
+  const showDate = currentModule === "exams";
+  document.getElementById("modalTitle").textContent = "إضافة عنصر إلى: " + sectionTitle;
   document.getElementById("modalFields").innerHTML = `
     <div class="field"><label>العنوان</label><input type="text" id="f_title" required /></div>
-    ${labels.showDate ? `<div class="field"><label>تاريخ الاختبار</label><input type="date" id="f_date" /></div>` : ""}
+    ${showDate ? `<div class="field"><label>تاريخ الاختبار</label><input type="date" id="f_date" /></div>` : ""}
     <div class="field"><label>الوصف (اختياري)</label><input type="text" id="f_description" /></div>
     <div class="field"><label>الملف (أي صيغة)</label><input type="file" id="f_file" /></div>
   `;
@@ -226,9 +356,7 @@ function openAddItemModal(sectionId) {
     await submitItem(sectionId);
   };
 
-  document.getElementById("modalCancel").onclick = () => {
-    document.getElementById("modalOverlay").classList.remove("show");
-  };
+  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
 }
 
 async function submitItem(sectionId) {
@@ -262,7 +390,14 @@ async function submitItem(sectionId) {
     if (insertError) throw insertError;
 
     document.getElementById("modalOverlay").classList.remove("show");
-    await loadItems(sectionId);
+
+    // تحديث العرض الصحيح حسب أين نحن الآن
+    if (currentSubSection && currentSubSection.id === sectionId) {
+      await loadPlainItems(sectionId);
+    } else if (currentRootSection) {
+      await loadAggregatedItems(currentRootSection.id);
+      if (currentRootSection.id !== sectionId) await loadSubSections(currentRootSection.id);
+    }
   } catch (err) {
     alert("حدث خطأ: " + (err.message || "تعذر الحفظ"));
   } finally {
@@ -279,5 +414,10 @@ async function deleteItem(id) {
   if (!confirm("متأكد تبي تحذف هذا العنصر؟")) return;
   const { error } = await supabaseClient.from("content_items").delete().eq("id", id);
   if (error) { alert("تعذر الحذف"); return; }
-  await loadItems(currentSectionId);
+
+  if (currentSubSection) {
+    await loadPlainItems(currentSubSection.id);
+  } else if (currentRootSection) {
+    await loadAggregatedItems(currentRootSection.id);
+  }
 }

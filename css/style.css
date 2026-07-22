@@ -455,6 +455,137 @@ body {
 .icon-btn:hover { color: var(--text-primary); }
 .icon-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
 
+/* ============ بطاقات الأقسام (تصميم عصري) ============ */
+.folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.folder-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 20px;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  overflow: hidden;
+}
+
+.folder-card::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; left: 0;
+  height: 3px;
+  background: var(--folder-color, var(--accent-cyan));
+}
+
+.folder-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--folder-color, var(--accent-cyan));
+  box-shadow: 0 10px 30px -12px rgba(0,0,0,0.5);
+}
+
+.folder-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 17px;
+  margin-bottom: 16px;
+  background: color-mix(in srgb, var(--folder-color, var(--accent-cyan)) 18%, transparent);
+  color: var(--folder-color, var(--accent-cyan));
+}
+
+.folder-title {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.folder-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.folder-delete {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.folder-card:hover .folder-delete { opacity: 1; }
+.folder-delete:hover { color: var(--danger); border-color: var(--danger); }
+
+.color-swatch-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.color-swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s, border-color 0.1s;
+}
+
+.color-swatch.selected {
+  border-color: var(--text-primary);
+  transform: scale(1.08);
+}
+
+.breadcrumb-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+}
+
+.breadcrumb-nav .crumb {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.breadcrumb-nav .crumb:hover { color: var(--accent-cyan); }
+.breadcrumb-nav .crumb.current { color: var(--text-primary); font-weight: 600; cursor: default; }
+
+.sub-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+  margin-inline-start: 8px;
+}
+
 /* نافذة منبثقة (Modal) */
 .modal-overlay {
   position: fixed;
