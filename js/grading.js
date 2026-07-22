@@ -356,3 +356,52 @@ async function loadReportBody() {
     </div>
   `;
 }
+
+// ============================================
+// 4) صفحة سجل متابعة الطلاب: بحث مباشر عن أي طالب
+// ============================================
+
+async function renderTrackingSearchSection() {
+  document.getElementById("pageTitle").textContent = "سجل متابعة الطلاب";
+  const contentArea = document.getElementById("contentArea");
+
+  contentArea.innerHTML = `
+    <div class="section-card">
+      <div class="section-head"><h3>🔍 ابحث عن الطالب لعرض تقريره الكامل</h3></div>
+      <input type="text" id="trackSearchInput" placeholder="اكتب اسم الطالب..." />
+      <div id="trackSearchResults" style="margin-top:14px;"></div>
+    </div>
+  `;
+
+  let searchTimeout;
+  document.getElementById("trackSearchInput").addEventListener("input", (e) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => trackSearch(e.target.value), 300);
+  });
+}
+
+async function trackSearch(query) {
+  const resultsEl = document.getElementById("trackSearchResults");
+  if (!query || query.trim().length < 2) { resultsEl.innerHTML = ""; return; }
+
+  const { data, error } = await supabaseClient
+    .from("students")
+    .select("*, classes(title)")
+    .ilike("full_name", `%${query.trim()}%`)
+    .limit(15);
+
+  if (error || !data || data.length === 0) {
+    resultsEl.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه نتائج</div>`;
+    return;
+  }
+
+  resultsEl.innerHTML = data.map((s) => `
+    <div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}')">
+      <div class="info">
+        <div class="t">${escapeHtml(s.full_name)}</div>
+        <div class="d">${s.classes ? escapeHtml(s.classes.title) : "بدون فصل"} · الصف ${escapeHtml(s.grade)}</div>
+      </div>
+      <div class="actions"><span class="icon-btn">←</span></div>
+    </div>
+  `).join("");
+}
