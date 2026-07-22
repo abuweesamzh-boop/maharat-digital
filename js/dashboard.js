@@ -120,10 +120,10 @@ document.querySelectorAll(".nav-link").forEach((link) => {
       renderExamsSection();
     } else if (section === "worksheets") {
       renderWorksheetsSection();
-    } else if (section === "students") {
-      renderStudentsSection();
+    } else if (section === "classes") {
+      renderClassesSection();
     } else if (section === "tracking") {
-      renderTrackingSection();
+      renderTrackingSearchSection();
     } else {
       renderComingSoon(link.textContent.trim());
     }

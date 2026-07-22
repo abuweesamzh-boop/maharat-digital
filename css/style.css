@@ -586,6 +586,175 @@ body {
   margin-inline-start: 8px;
 }
 
+/* ============ جدول إدخال الدرجات الجماعي ============ */
+.grade-table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border-soft);
+}
+
+.grade-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.grade-table thead th {
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 12px 10px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+
+.grade-table thead th:first-child { text-align: right; }
+
+.grade-table tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: center;
+}
+
+.grade-table tbody tr:last-child td { border-bottom: none; }
+.grade-table tbody tr:hover { background: var(--bg-surface-2); }
+
+.grade-table .student-name-cell {
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.grade-table input[type="number"] {
+  width: 64px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 7px 6px;
+  color: var(--text-primary);
+  text-align: center;
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+
+.grade-table input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+}
+
+.session-pill-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.session-pill {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+  position: relative;
+  min-width: 110px;
+}
+
+.session-pill:hover { border-color: var(--accent-cyan); transform: translateY(-2px); }
+
+.session-pill .num {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--accent-cyan);
+}
+
+.session-pill .lbl {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.session-pill .del {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.session-pill:hover .del { opacity: 1; }
+.session-pill .del:hover { color: var(--danger); }
+
+.period-toggle {
+  display: inline-flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.period-toggle button {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.period-toggle button.active {
+  background: var(--accent-cyan);
+  color: #06231F;
+}
+
+.component-ring-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.component-mini-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+}
+
+.component-mini-card .val {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 24px;
+  color: var(--accent-cyan);
+}
+
+.component-mini-card .of {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.component-mini-card .lbl {
+  font-size: 12px;
+  color: var(--text-primary);
+  margin-top: 8px;
+  font-weight: 600;
+}
+
 /* نافذة منبثقة (Modal) */
 .modal-overlay {
   position: fixed;
