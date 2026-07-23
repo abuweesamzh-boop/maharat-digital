@@ -755,6 +755,129 @@ body {
   font-weight: 600;
 }
 
+/* ============ أزرار الإدخال السريع (شرائح الدرجات) ============ */
+.score-chips {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+}
+
+.chip {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-deep);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: var(--font-body);
+}
+
+.chip:hover { border-color: var(--accent-cyan); }
+
+.chip.active {
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  color: #06231F;
+}
+
+.chip.active[data-val="0"], .chip.active[data-val="2"], .chip.active[data-val="4"] {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.chip.active[data-val="6"] {
+  background: var(--accent-amber);
+  border-color: var(--accent-amber);
+  color: #2A1B03;
+}
+
+/* ============ زر تبديل الحضور ============ */
+.attendance-toggle {
+  border: 1px solid var(--border-soft);
+  background: var(--bg-deep);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--success);
+}
+
+.attendance-toggle.absent {
+  color: var(--danger);
+  background: rgba(241,101,101,0.08);
+  border-color: rgba(241,101,101,0.3);
+}
+
+/* ============ محدد الأعمدة (المعايير المفعّلة لهالحصة) ============ */
+.column-picker {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 14px;
+  background: var(--bg-surface-2);
+  border-radius: 12px;
+}
+
+.column-picker label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+/* ============ بطاقات السلوك ============ */
+.behavior-note {
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border-soft);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.behavior-note.positive { border-inline-start: 3px solid var(--success); }
+.behavior-note.negative { border-inline-start: 3px solid var(--danger); }
+
+.behavior-note .txt { font-size: 13px; line-height: 1.7; flex: 1; }
+.behavior-note .date { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+.btn-pill-choice {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.btn-pill-choice button {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+
+.btn-pill-choice button.positive.active { background: rgba(74,222,128,0.15); border-color: var(--success); color: var(--success); }
+.btn-pill-choice button.negative.active { background: rgba(241,101,101,0.15); border-color: var(--danger); color: var(--danger); }
+
+/* ============ جدول تقرير الفصل ============ */
+.class-report-table { font-size: 12px; }
+.class-report-table th { font-size: 11px; }
+
 /* نافذة منبثقة (Modal) */
 .modal-overlay {
   position: fixed;
