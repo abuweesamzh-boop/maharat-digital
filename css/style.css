@@ -763,13 +763,13 @@ body {
 }
 
 .chip {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   border: 1px solid var(--border-soft);
   background: var(--bg-deep);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.12s;
@@ -877,6 +877,64 @@ body {
 /* ============ جدول تقرير الفصل ============ */
 .class-report-table { font-size: 12px; }
 .class-report-table th { font-size: 11px; }
+
+/* ============ تثبيت الأعمدة الطرفية عند التمرير الأفقي ============ */
+.grade-table th:first-child, .grade-table td:first-child {
+  position: sticky;
+  right: 0;
+  background: var(--bg-surface);
+  z-index: 2;
+}
+
+.grade-table thead th:first-child { background: var(--bg-surface-2); }
+
+.grade-table th:last-child, .grade-table td:last-child {
+  position: sticky;
+  left: 0;
+  background: var(--bg-surface);
+  z-index: 2;
+}
+
+.grade-table thead th:last-child { background: var(--bg-surface-2); }
+
+.grade-table-wrap {
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+/* ============ زر ملاحظة سريعة داخل الجدول ============ */
+.quick-note-btn {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-deep);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.quick-note-btn.has-note { border-color: var(--accent-amber); color: var(--accent-amber); }
+
+.quick-note-popover {
+  position: absolute;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 10px 30px -8px rgba(0,0,0,0.6);
+  z-index: 50;
+  width: 260px;
+}
+
+/* ============ وضع الطباعة ============ */
+@media print {
+  .sidebar, .topbar .hamburger, .btn-add, .btn-secondary, .no-print, .period-toggle, .breadcrumb-nav { display: none !important; }
+  .app-shell { display: block !important; }
+  .main-area { padding: 0 !important; }
+  body { background: #fff !important; color: #000 !important; }
+  .section-card, .stat-card, .component-mini-card, .behavior-note { border-color: #ccc !important; background: #fff !important; color: #000 !important; }
+  .pixel-field { display: none !important; }
+}
 
 /* نافذة منبثقة (Modal) */
 .modal-overlay {

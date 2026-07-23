@@ -174,7 +174,7 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
     const body = document.getElementById("gradeTableBody");
 
     if (isContinuous) {
-      head.innerHTML = `<th>الطالب</th>${activeCols.map((f) => `<th>${CONTINUOUS_COLS.find((c) => c.field === f).label}</th>`).join("")}<th>الحضور</th>`;
+      head.innerHTML = `<th>الطالب</th>${CONTINUOUS_COLS.map((c) => `<th class="col-${c.field}">${c.label}</th>`).join("")}<th>ملاحظة</th><th>الحضور</th>`;
     } else {
       head.innerHTML = `<th>الطالب</th><th>الدرجة (30)</th>`;
     }
@@ -182,9 +182,9 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
     body.innerHTML = students.map((st) => {
       const sc = scoreMap[st.id] || {};
       if (isContinuous) {
-        const cols = activeCols.map((field) => {
+        const cols = CONTINUOUS_COLS.map(({ field }) => {
           const current = sc[field] !== undefined && sc[field] !== null ? sc[field] : 10;
-          return `<td><div class="score-chips" data-field="${field}" data-student="${st.id}" data-value="${current}">
+          return `<td class="col-${field}"><div class="score-chips" data-field="${field}" data-student="${st.id}" data-value="${current}">
             ${CHIP_VALUES.map((v) => `<button type="button" class="chip ${v === current ? "active" : ""}" data-val="${v}">${v}</button>`).join("")}
           </div></td>`;
         }).join("");
@@ -192,6 +192,7 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
         return `<tr data-student="${st.id}">
           <td class="student-name-cell">${escapeHtml(st.full_name)}</td>
           ${cols}
+          <td><button type="button" class="quick-note-btn" data-student="${st.id}" data-name="${escapeAttr(st.full_name)}" title="ملاحظة سريعة">📝</button></td>
           <td><button type="button" class="attendance-toggle ${isPresent ? "" : "absent"}" data-present="${isPresent}">${isPresent ? "✓ حاضر" : "✕ غائب"}</button></td>
         </tr>`;
       }
@@ -202,7 +203,7 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
       </tr>`;
     }).join("");
 
-    // ربط أزرار الشرائح
+    // ربط أزرار الشرائح (كل مجموعة مستقلة تماماً عن غيرها)
     body.querySelectorAll(".score-chips").forEach((group) => {
       group.querySelectorAll(".chip").forEach((chip) => {
         chip.addEventListener("click", () => {
@@ -222,6 +223,22 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
         btn.classList.toggle("absent", present);
       });
     });
+
+    // ربط زر الملاحظة السريعة
+    body.querySelectorAll(".quick-note-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => openQuickNotePopover(e, btn.dataset.student, btn.dataset.name));
+    });
+
+    applyColumnVisibility();
+  }
+
+  function applyColumnVisibility() {
+    CONTINUOUS_COLS.forEach(({ field }) => {
+      const visible = activeCols.includes(field);
+      document.querySelectorAll(`.col-${field}`).forEach((el) => {
+        el.style.display = visible ? "" : "none";
+      });
+    });
   }
 
   renderTableRows();
@@ -230,12 +247,77 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
     document.querySelectorAll(".col-check").forEach((chk) => {
       chk.addEventListener("change", () => {
         activeCols = Array.from(document.querySelectorAll(".col-check:checked")).map((c) => c.value);
-        renderTableRows();
+        applyColumnVisibility();
       });
     });
   }
 
   document.getElementById("saveGridBtn").addEventListener("click", () => saveSessionGrid(sessionId, isContinuous));
+}
+
+// ============ ملاحظة سريعة من داخل جدول الحصة ============
+
+function openQuickNotePopover(event, studentId, studentName) {
+  document.querySelectorAll(".quick-note-popover").forEach((p) => p.remove());
+
+  const btn = event.currentTarget;
+  const rect = btn.getBoundingClientRect();
+
+  const pop = document.createElement("div");
+  pop.className = "quick-note-popover";
+  pop.style.top = (rect.bottom + window.scrollY + 6) + "px";
+  pop.style.left = (rect.left + window.scrollX - 100) + "px";
+  pop.innerHTML = `
+    <div style="font-size:12px; font-weight:700; margin-bottom:10px;">ملاحظة سريعة: ${escapeHtml(studentName)}</div>
+    <div class="btn-pill-choice" style="margin-bottom:10px;">
+      <button type="button" class="positive active" data-type="positive" style="padding:8px;">🟢 إيجابية</button>
+      <button type="button" class="negative" data-type="negative" style="padding:8px;">🔴 سلبية</button>
+    </div>
+    <input type="text" id="qn_text" placeholder="اكتب الملاحظة..." style="margin-bottom:10px;" />
+    <div style="display:flex; gap:8px;">
+      <button type="button" class="btn-secondary" id="qn_cancel" style="width:auto; padding:8px 14px;">إلغاء</button>
+      <button type="button" class="btn-add" id="qn_save" style="flex:1;">حفظ</button>
+    </div>
+  `;
+  document.body.appendChild(pop);
+
+  let noteType = "positive";
+  pop.querySelectorAll(".btn-pill-choice button").forEach((b) => {
+    b.addEventListener("click", () => {
+      pop.querySelectorAll(".btn-pill-choice button").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      noteType = b.dataset.type;
+    });
+  });
+
+  pop.querySelector("#qn_cancel").addEventListener("click", () => pop.remove());
+
+  pop.querySelector("#qn_save").addEventListener("click", async () => {
+    const text = pop.querySelector("#qn_text").value.trim();
+    if (!text) return;
+    const saveBtn = pop.querySelector("#qn_save");
+    saveBtn.disabled = true;
+    saveBtn.textContent = "...";
+
+    const { error } = await supabaseClient.from("behavior_notes").insert({ student_id: studentId, note_type: noteType, note: text });
+
+    if (error) { alert("تعذر الحفظ"); saveBtn.disabled = false; saveBtn.textContent = "حفظ"; return; }
+
+    const btnEl = document.querySelector(`.quick-note-btn[data-student="${studentId}"]`);
+    if (btnEl) btnEl.classList.add("has-note");
+
+    pop.remove();
+  });
+
+  // إغلاق عند الضغط بره النافذة
+  setTimeout(() => {
+    document.addEventListener("click", function closeOnOutside(e) {
+      if (!pop.contains(e.target) && e.target !== btn) {
+        pop.remove();
+        document.removeEventListener("click", closeOnOutside);
+      }
+    });
+  }, 50);
 }
 
 async function saveSessionGrid(sessionId, isContinuous) {
@@ -289,12 +371,15 @@ function renderReportShell() {
   const contentArea = document.getElementById("contentArea");
   contentArea.innerHTML = `
     <div class="section-card" style="margin-bottom:18px;">
-      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-        <div class="folder-avatar" style="--folder-color:var(--accent-cyan); width:56px; height:56px; font-size:22px;">${reportStudent.name.charAt(0)}</div>
-        <div>
-          <div style="font-family:var(--font-display); font-weight:800; font-size:19px;">${escapeHtml(reportStudent.name)}</div>
-          <div style="color:var(--text-muted); font-size:13px;">${reportStudent.class_title ? escapeHtml(reportStudent.class_title) : "بدون فصل"}</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <div class="folder-avatar" style="--folder-color:var(--accent-cyan); width:56px; height:56px; font-size:22px;">${reportStudent.name.charAt(0)}</div>
+          <div>
+            <div style="font-family:var(--font-display); font-weight:800; font-size:19px;">${escapeHtml(reportStudent.name)}</div>
+            <div style="color:var(--text-muted); font-size:13px;">${reportStudent.class_title ? escapeHtml(reportStudent.class_title) : "بدون فصل"}</div>
+          </div>
         </div>
+        <button class="btn-secondary no-print" style="width:auto; padding:10px 18px;" onclick="window.print()">🖨️ طباعة التقرير</button>
       </div>
     </div>
     <div class="period-toggle" id="reportPeriodToggle">
