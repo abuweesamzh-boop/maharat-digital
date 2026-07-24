@@ -1,5 +1,5 @@
 // ============================================
-// نظام التقييم: إدخال سريع بالشرائح + حضور + سلوك
+// نظام التقييم: إدخال سريع + حضور + سلوك + طباعة/إكسل
 // ============================================
 
 const SESSION_KIND_LABELS = { continuous: "الحصص", written_exam: "الاختبار التحريري", practical_exam: "الاختبار العملي" };
@@ -109,7 +109,7 @@ async function deleteSession(sessionId) {
 }
 
 // ============================================
-// 2) جدول الإدخال السريع (شرائح + حضور)
+// 2) جدول الإدخال السريع (شرائح + حضور + ملاحظة)
 // ============================================
 
 const CONTINUOUS_COLS = [
@@ -148,9 +148,7 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
 
     ${isContinuous ? `
     <div class="column-picker" id="columnPicker">
-      ${CONTINUOUS_COLS.map((c) => `
-        <label><input type="checkbox" class="col-check" value="${c.field}" checked /> ${c.label}</label>
-      `).join("")}
+      ${CONTINUOUS_COLS.map((c) => `<label><input type="checkbox" class="col-check" value="${c.field}" checked /> ${c.label}</label>`).join("")}
     </div>
     ` : ""}
 
@@ -159,7 +157,7 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
         <h3>إدخال الدرجات — ${students.length} طالب</h3>
         <button class="btn-add" id="saveGridBtn">💾 حفظ الكل</button>
       </div>
-      <p style="color:var(--text-muted); font-size:12px; margin-bottom:14px;">القيمة الافتراضية 10 لكل خانة — بس اضغط على الرقم المناسب للطالب لو يستحق أقل. ${isContinuous ? "الحضور محدد \"حاضر\" افتراضياً لكل الطلاب." : ""}</p>
+      <p style="color:var(--text-muted); font-size:12px; margin-bottom:14px;">القيمة الافتراضية 10 لكل خانة — بس اضغط على الرقم المناسب للطالب لو يستحق أقل. ${isContinuous ? "الحضور محدد \"حاضر\" افتراضياً." : ""}</p>
       <div class="grade-table-wrap">
         <table class="grade-table" id="gradeTable">
           <thead><tr id="gradeTableHead"></tr></thead>
@@ -203,7 +201,6 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
       </tr>`;
     }).join("");
 
-    // ربط أزرار الشرائح (كل مجموعة مستقلة تماماً عن غيرها)
     body.querySelectorAll(".score-chips").forEach((group) => {
       group.querySelectorAll(".chip").forEach((chip) => {
         chip.addEventListener("click", () => {
@@ -214,7 +211,6 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
       });
     });
 
-    // ربط زر الحضور
     body.querySelectorAll(".attendance-toggle").forEach((btn) => {
       btn.addEventListener("click", () => {
         const present = btn.dataset.present === "true";
@@ -224,7 +220,6 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
       });
     });
 
-    // ربط زر الملاحظة السريعة
     body.querySelectorAll(".quick-note-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => openQuickNotePopover(e, btn.dataset.student, btn.dataset.name));
     });
@@ -235,9 +230,7 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
   function applyColumnVisibility() {
     CONTINUOUS_COLS.forEach(({ field }) => {
       const visible = activeCols.includes(field);
-      document.querySelectorAll(`.col-${field}`).forEach((el) => {
-        el.style.display = visible ? "" : "none";
-      });
+      document.querySelectorAll(`.col-${field}`).forEach((el) => { el.style.display = visible ? "" : "none"; });
     });
   }
 
@@ -255,11 +248,8 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
   document.getElementById("saveGridBtn").addEventListener("click", () => saveSessionGrid(sessionId, isContinuous));
 }
 
-// ============ ملاحظة سريعة من داخل جدول الحصة ============
-
 function openQuickNotePopover(event, studentId, studentName) {
   document.querySelectorAll(".quick-note-popover").forEach((p) => p.remove());
-
   const btn = event.currentTarget;
   const rect = btn.getBoundingClientRect();
 
@@ -300,22 +290,16 @@ function openQuickNotePopover(event, studentId, studentName) {
     saveBtn.textContent = "...";
 
     const { error } = await supabaseClient.from("behavior_notes").insert({ student_id: studentId, note_type: noteType, note: text });
-
     if (error) { alert("تعذر الحفظ"); saveBtn.disabled = false; saveBtn.textContent = "حفظ"; return; }
 
     const btnEl = document.querySelector(`.quick-note-btn[data-student="${studentId}"]`);
     if (btnEl) btnEl.classList.add("has-note");
-
     pop.remove();
   });
 
-  // إغلاق عند الضغط بره النافذة
   setTimeout(() => {
     document.addEventListener("click", function closeOnOutside(e) {
-      if (!pop.contains(e.target) && e.target !== btn) {
-        pop.remove();
-        document.removeEventListener("click", closeOnOutside);
-      }
+      if (!pop.contains(e.target) && e.target !== btn) { pop.remove(); document.removeEventListener("click", closeOnOutside); }
     });
   }, 50);
 }
@@ -329,11 +313,8 @@ async function saveSessionGrid(sessionId, isContinuous) {
   const payload = Array.from(rowsEls).map((tr) => {
     const studentId = tr.dataset.student;
     const row = { session_id: sessionId, student_id: studentId };
-
     if (isContinuous) {
-      tr.querySelectorAll(".score-chips").forEach((group) => {
-        row[group.dataset.field] = parseFloat(group.dataset.value);
-      });
+      tr.querySelectorAll(".score-chips").forEach((group) => { row[group.dataset.field] = parseFloat(group.dataset.value); });
       const attBtn = tr.querySelector(".attendance-toggle");
       row.attendance = attBtn.dataset.present === "true";
     } else {
@@ -406,17 +387,28 @@ function renderReportShell() {
   });
 
   document.getElementById("addBehaviorBtn").addEventListener("click", openAddBehaviorModal);
-
   loadReportBody();
   loadBehaviorNotes();
 }
 
+function calcStudentResults(scores, sessionMap) {
+  return COMPONENT_DEFS.map((def) => {
+    const relevant = scores.filter((sc) => {
+      const sess = sessionMap[sc.session_id];
+      if (!sess) return false;
+      if (def.key === "written_exam") return sess.session_kind === "written_exam";
+      if (def.key === "practical_exam") return sess.session_kind === "practical_exam";
+      return sess.session_kind === "continuous";
+    });
+    const values = relevant.map((sc) => sc[def.field]).filter((v) => v !== null && v !== undefined);
+    const avg = values.length > 0 ? values.reduce((a, b) => a + Number(b), 0) / values.length : 0;
+    return { ...def, avg: Math.round(avg * 100) / 100, count: values.length };
+  });
+}
+
 async function loadReportBody() {
   const bodyEl = document.getElementById("reportBody");
-  if (!reportStudent.class_id) {
-    bodyEl.innerHTML = `<div class="section-card"><div class="empty-state">هذا الطالب غير مرتبط بفصل.</div></div>`;
-    return;
-  }
+  if (!reportStudent.class_id) { bodyEl.innerHTML = `<div class="section-card"><div class="empty-state">هذا الطالب غير مرتبط بفصل.</div></div>`; return; }
   bodyEl.innerHTML = `<div class="empty-state">جاري التحميل...</div>`;
 
   const { data: sessions } = await supabaseClient.from("class_sessions").select("*").eq("class_id", reportStudent.class_id).eq("period", reportPeriod);
@@ -429,19 +421,7 @@ async function loadReportBody() {
   const sessionMap = {};
   (sessions || []).forEach((s) => (sessionMap[s.id] = s));
 
-  const results = COMPONENT_DEFS.map((def) => {
-    const relevant = scores.filter((sc) => {
-      const sess = sessionMap[sc.session_id];
-      if (!sess) return false;
-      if (def.key === "written_exam") return sess.session_kind === "written_exam";
-      if (def.key === "practical_exam") return sess.session_kind === "practical_exam";
-      return sess.session_kind === "continuous";
-    });
-    const values = relevant.map((sc) => sc[def.field]).filter((v) => v !== null && v !== undefined);
-    const avg = values.length > 0 ? values.reduce((a, b) => a + Number(b), 0) / values.length : 0;
-    return { ...def, avg: Math.round(avg * 100) / 100, count: values.length };
-  });
-
+  const results = calcStudentResults(scores, sessionMap);
   const total = Math.round(results.reduce((sum, r) => sum + r.avg, 0) * 100) / 100;
 
   const continuousScores = scores.filter((sc) => sessionMap[sc.session_id] && sessionMap[sc.session_id].session_kind === "continuous");
@@ -539,18 +519,27 @@ async function deleteBehaviorNote(id) {
 }
 
 // ============================================
-// 5) تقرير الفصل الشامل
+// 5) تقرير الفصل الشامل + طباعة/إكسل
 // ============================================
+
+let classReportCache = null;
 
 async function renderClassReport(classId, classTitle) {
   document.getElementById("pageTitle").textContent = `تقرير الفصل: ${classTitle}`;
   const contentArea = document.getElementById("contentArea");
 
   contentArea.innerHTML = `
-    <button class="btn-secondary" style="width:auto; padding:8px 16px; margin-bottom:16px;" onclick="openClass('${classId}', '${escapeAttr(classTitle)}')">← رجوع للفصل</button>
-    <div class="period-toggle" id="reportClassPeriodToggle">
-      <button data-p="p1" class="active">الفترة الأولى</button>
-      <button data-p="p2">الفترة الثانية</button>
+    <button class="btn-secondary no-print" style="width:auto; padding:8px 16px; margin-bottom:16px;" onclick="openClass('${classId}', '${escapeAttr(classTitle)}')">← رجوع للفصل</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+      <div class="period-toggle" id="reportClassPeriodToggle" style="margin-bottom:0;">
+        <button data-p="p1" class="active">الفترة الأولى</button>
+        <button data-p="p2">الفترة الثانية</button>
+      </div>
+      <div class="no-print" style="display:flex; gap:10px;">
+        <button class="btn-secondary" style="width:auto; padding:10px 16px;" onclick="window.print()">🖨️ طباعة الجدول</button>
+        <button class="btn-secondary" style="width:auto; padding:10px 16px;" onclick="exportClassReportExcel('${escapeAttr(classTitle)}')">📥 تصدير إكسل</button>
+        <button class="btn-add" onclick="printAllStudentReports('${classId}', '${escapeAttr(classTitle)}')">🖨️ طباعة تقارير كل الطلاب</button>
+      </div>
     </div>
     <div class="section-card">
       <div class="grade-table-wrap">
@@ -582,10 +571,7 @@ async function loadClassReportBody(classId, period) {
   body.innerHTML = `<tr><td colspan="11" class="empty-state">جاري التحميل...</td></tr>`;
 
   const { data: students } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
-  if (!students || students.length === 0) {
-    body.innerHTML = `<tr><td colspan="11" class="empty-state">ما فيه طلاب بهذا الفصل</td></tr>`;
-    return;
-  }
+  if (!students || students.length === 0) { body.innerHTML = `<tr><td colspan="11" class="empty-state">ما فيه طلاب بهذا الفصل</td></tr>`; return; }
 
   const { data: sessions } = await supabaseClient.from("class_sessions").select("*").eq("class_id", classId).eq("period", period);
   const sessionIds = (sessions || []).map((s) => s.id);
@@ -600,20 +586,10 @@ async function loadClassReportBody(classId, period) {
 
   const { data: allNotes } = await supabaseClient.from("behavior_notes").select("*").in("student_id", students.map((s) => s.id));
 
-  body.innerHTML = students.map((st) => {
+  const rowsData = students.map((st) => {
     const myScores = allScores.filter((sc) => sc.student_id === st.id);
-    const results = COMPONENT_DEFS.map((def) => {
-      const relevant = myScores.filter((sc) => {
-        const sess = sessionMap[sc.session_id];
-        if (!sess) return false;
-        if (def.key === "written_exam") return sess.session_kind === "written_exam";
-        if (def.key === "practical_exam") return sess.session_kind === "practical_exam";
-        return sess.session_kind === "continuous";
-      });
-      const values = relevant.map((sc) => sc[def.field]).filter((v) => v !== null && v !== undefined);
-      return values.length > 0 ? Math.round((values.reduce((a, b) => a + Number(b), 0) / values.length) * 100) / 100 : 0;
-    });
-    const total = Math.round(results.reduce((a, b) => a + b, 0) * 100) / 100;
+    const results = calcStudentResults(myScores, sessionMap);
+    const total = Math.round(results.reduce((a, b) => a + b.avg, 0) * 100) / 100;
 
     const continuousScores = myScores.filter((sc) => sessionMap[sc.session_id] && sessionMap[sc.session_id].session_kind === "continuous");
     const presentCount = continuousScores.filter((sc) => sc.attendance !== false).length;
@@ -623,52 +599,86 @@ async function loadClassReportBody(classId, period) {
     const posCount = myNotes.filter((n) => n.note_type === "positive").length;
     const negCount = myNotes.filter((n) => n.note_type === "negative").length;
 
-    return `
-      <tr style="cursor:pointer;" onclick="openStudentReport('${st.id}', '${escapeAttr(st.full_name)}')">
-        <td class="student-name-cell">${escapeHtml(st.full_name)}</td>
-        ${results.map((r) => `<td>${r}</td>`).join("")}
-        <td style="font-weight:700; color:var(--accent-cyan);">${total}</td>
-        <td>${attendanceStr}</td>
-        <td>${posCount}</td>
-        <td>${negCount}</td>
-      </tr>
-    `;
-  }).join("");
-}
-
-// ============================================
-// 6) صفحة سجل متابعة الطلاب: بحث مباشر عن أي طالب
-// ============================================
-
-async function renderTrackingSearchSection() {
-  document.getElementById("pageTitle").textContent = "سجل متابعة الطلاب";
-  const contentArea = document.getElementById("contentArea");
-
-  contentArea.innerHTML = `
-    <div class="section-card">
-      <div class="section-head"><h3>🔍 ابحث عن الطالب لعرض تقريره الكامل</h3></div>
-      <input type="text" id="trackSearchInput" placeholder="اكتب اسم الطالب..." />
-      <div id="trackSearchResults" style="margin-top:14px;"></div>
-    </div>
-  `;
-
-  let searchTimeout;
-  document.getElementById("trackSearchInput").addEventListener("input", (e) => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => trackSearch(e.target.value), 300);
+    return { student: st, results, total, attendanceStr, posCount, negCount };
   });
+
+  classReportCache = { classId, period, rowsData };
+
+  body.innerHTML = rowsData.map((r) => `
+    <tr style="cursor:pointer;" onclick="openStudentReport('${r.student.id}', '${escapeAttr(r.student.full_name)}')">
+      <td class="student-name-cell">${escapeHtml(r.student.full_name)}</td>
+      ${r.results.map((c) => `<td>${c.avg}</td>`).join("")}
+      <td style="font-weight:700; color:var(--accent-cyan);">${r.total}</td>
+      <td>${r.attendanceStr}</td>
+      <td>${r.posCount}</td>
+      <td>${r.negCount}</td>
+    </tr>
+  `).join("");
 }
+
+function exportClassReportExcel(classTitle) {
+  if (!classReportCache) return;
+  const headers = ["الطالب", "المشاركة", "الواجبات", "المهام الأدائية", "التطبيق العملي", "التحريري", "العملي", "الإجمالي", "الحضور", "ملاحظات إيجابية", "ملاحظات سلبية"];
+  const rows = classReportCache.rowsData.map((r) => [
+    r.student.full_name, ...r.results.map((c) => c.avg), r.total, r.attendanceStr, r.posCount, r.negCount,
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "تقرير الفصل");
+  XLSX.writeFile(wb, `تقرير-${classTitle}.xlsx`);
+}
+
+async function printAllStudentReports(classId, classTitle) {
+  if (!classReportCache || classReportCache.classId !== classId) return;
+
+  const periodLabel = classReportCache.period === "p1" ? "الفترة الأولى" : "الفترة الثانية";
+
+  const studentsHtml = classReportCache.rowsData.map((r) => `
+    <div style="page-break-after: always; padding: 20px; font-family: Tajawal, Arial, sans-serif; direction: rtl;">
+      <h2 style="margin-bottom:4px;">${escapeHtml(r.student.full_name)}</h2>
+      <p style="color:#555; margin-bottom:20px;">${escapeHtml(classTitle)} — ${periodLabel}</p>
+      <table style="width:100%; border-collapse: collapse; margin-bottom:20px;">
+        <thead>
+          <tr style="background:#eee;">
+            ${r.results.map((c) => `<th style="border:1px solid #ccc; padding:8px;">${c.label}</th>`).join("")}
+            <th style="border:1px solid #ccc; padding:8px;">الإجمالي</th>
+            <th style="border:1px solid #ccc; padding:8px;">الحضور</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            ${r.results.map((c) => `<td style="border:1px solid #ccc; padding:8px; text-align:center;">${c.avg} / ${c.target}</td>`).join("")}
+            <td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${r.total} / 100</td>
+            <td style="border:1px solid #ccc; padding:8px; text-align:center;">${r.attendanceStr}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>ملاحظات إيجابية: ${r.posCount} · ملاحظات سلبية: ${r.negCount}</p>
+    </div>
+  `).join("");
+
+  const win = window.open("", "_blank");
+  win.document.write(`
+    <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقارير ${escapeHtml(classTitle)}</title></head>
+    <body>${studentsHtml}</body></html>
+  `);
+  win.document.close();
+  setTimeout(() => win.print(), 400);
+}
+
+// ============================================
+// 6) صفحة سجل متابعة البحث (لاستخدام داخلي إن لزم)
+// ============================================
 
 async function trackSearch(query) {
   const resultsEl = document.getElementById("trackSearchResults");
+  if (!resultsEl) return;
   if (!query || query.trim().length < 2) { resultsEl.innerHTML = ""; return; }
 
   const { data, error } = await supabaseClient.from("students").select("*, classes(title)").ilike("full_name", `%${query.trim()}%`).limit(15);
 
-  if (error || !data || data.length === 0) {
-    resultsEl.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه نتائج</div>`;
-    return;
-  }
+  if (error || !data || data.length === 0) { resultsEl.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه نتائج</div>`; return; }
 
   resultsEl.innerHTML = data.map((s) => `
     <div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}')">

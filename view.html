@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>مهارات رقمية | عرض المشرف</title>
+<link rel="stylesheet" href="css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div class="pixel-field"></div>
+
+<div id="viewRoot" style="position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:32px 20px;">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:24px;">
+    <div class="logo" style="font-family:var(--font-display); font-weight:800; font-size:20px;">مهارات <span style="color:var(--accent-cyan);">رقمية</span></div>
+    <span class="sub-badge">عرض فقط</span>
+  </div>
+  <div id="viewContent"><div class="empty-state">جاري التحقق من الرابط...</div></div>
+</div>
+
+<script src="js/supabaseClient.js"></script>
+<script src="js/view.js"></script>
+</body>
+</html>

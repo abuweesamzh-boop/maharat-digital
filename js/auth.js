@@ -15,7 +15,6 @@ function hideError() {
   errorBox.classList.remove("show");
 }
 
-// لو فيه جلسة شغالة أصلاً، حوّل مباشرة للوحة التحكم
 (async function checkExistingSession() {
   const { data } = await supabaseClient.auth.getSession();
   if (data.session) {
@@ -34,10 +33,7 @@ if (loginForm) {
     loginBtn.disabled = true;
     loginBtn.innerHTML = '<span class="loading-spin"></span>';
 
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
     if (error) {
       loginBtn.disabled = false;
@@ -46,12 +42,8 @@ if (loginForm) {
       return;
     }
 
-    // تحقق من وجود بروفايل للمستخدم (دور محدد)
     const { data: profile, error: profileError } = await supabaseClient
-      .from("users_profile")
-      .select("*")
-      .eq("id", data.user.id)
-      .single();
+      .from("users_profile").select("*").eq("id", data.user.id).single();
 
     if (profileError || !profile) {
       loginBtn.disabled = false;

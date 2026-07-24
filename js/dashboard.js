@@ -2,29 +2,15 @@
 // لوحة التحكم — دخول محمي + عرض ديناميكي
 // ============================================
 
-const roleLabels = {
-  teacher: "المعلم",
-  student: "الطالب",
-  supervisor: "المشرف",
-};
-
+const roleLabels = { teacher: "المعلم", student: "الطالب", supervisor: "المشرف" };
 let currentProfile = null;
 
 async function guardAndLoad() {
   const { data: sessionData } = await supabaseClient.auth.getSession();
-
-  if (!sessionData.session) {
-    window.location.href = "index.html";
-    return;
-  }
+  if (!sessionData.session) { window.location.href = "index.html"; return; }
 
   const userId = sessionData.session.user.id;
-
-  const { data: profile, error } = await supabaseClient
-    .from("users_profile")
-    .select("*")
-    .eq("id", userId)
-    .single();
+  const { data: profile, error } = await supabaseClient.from("users_profile").select("*").eq("id", userId).single();
 
   if (error || !profile) {
     await supabaseClient.auth.signOut();
@@ -46,16 +32,11 @@ function renderUserInfo(profile) {
 
 function renderNavByRole(role) {
   const teacherNav = document.getElementById("teacherNav");
-  // حالياً: المعلم فقط يشوف روابط المحتوى الكاملة
-  // (أقسام الطالب والمشرف تُبنى بخطوة لاحقة كواجهات مخصصة لهم)
-  if (role !== "teacher") {
-    teacherNav.style.display = "none";
-  }
+  if (role !== "teacher") teacherNav.style.display = "none";
 }
 
 async function loadHomeStats() {
   const contentArea = document.getElementById("contentArea");
-
   contentArea.innerHTML = `
     <div class="stat-grid" id="statGrid">
       <div class="stat-card"><div class="num">–</div><div class="lbl">عناصر ملف الإنجاز</div></div>
@@ -64,12 +45,9 @@ async function loadHomeStats() {
       <div class="stat-card"><div class="num">–</div><div class="lbl">الاختبارات</div></div>
     </div>
     <div class="section-card">
-      <div class="section-head">
-        <h3>مرحباً، ${currentProfile.full_name} 👋</h3>
-      </div>
+      <div class="section-head"><h3>مرحباً، ${currentProfile.full_name} 👋</h3></div>
       <p style="color:var(--text-muted); font-size:14px; line-height:1.9;">
         هذي نظرة عامة سريعة على موقع مادة المهارات الرقمية. استخدم القائمة الجانبية للتنقل بين الأقسام.
-        الأقسام التفصيلية (ملف الإنجاز، سجل المتابعة، العروض، الاختبارات، استيراد بيانات الطلاب) قيد الإضافة تباعاً.
       </p>
     </div>
   `;
@@ -93,16 +71,10 @@ async function loadHomeStats() {
 function renderComingSoon(title) {
   document.getElementById("pageTitle").textContent = title;
   document.getElementById("contentArea").innerHTML = `
-    <div class="section-card">
-      <div class="empty-state">
-        <div class="ico">🚧</div>
-        <div>قسم "${title}" قيد الإنشاء حالياً — بيتم تفعيله بالخطوة القادمة</div>
-      </div>
-    </div>
+    <div class="section-card"><div class="empty-state"><div class="ico">🚧</div><div>قسم "${title}" قيد الإنشاء</div></div></div>
   `;
 }
 
-// التنقل بين الأقسام
 document.querySelectorAll(".nav-link").forEach((link) => {
   link.addEventListener("click", () => {
     document.querySelectorAll(".nav-link").forEach((l) => l.classList.remove("active"));
@@ -122,24 +94,21 @@ document.querySelectorAll(".nav-link").forEach((link) => {
       renderWorksheetsSection();
     } else if (section === "classes") {
       renderClassesSection();
-    } else if (section === "tracking") {
-      renderTrackingSearchSection();
+    } else if (section === "sharelinks") {
+      renderShareLinksSection();
     } else {
       renderComingSoon(link.textContent.trim());
     }
 
-    // إغلاق القائمة الجانبية بالجوال بعد الاختيار
     document.getElementById("sidebar").classList.remove("open");
   });
 });
 
-// تسجيل الخروج
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
   window.location.href = "index.html";
 });
 
-// زر القائمة بالجوال
 document.getElementById("hamburger")?.addEventListener("click", () => {
   document.getElementById("sidebar").classList.toggle("open");
 });
