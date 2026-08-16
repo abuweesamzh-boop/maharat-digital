@@ -8,20 +8,15 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-
 <div class="pixel-field"></div>
-
 <div class="app-shell">
-
   <aside class="sidebar" id="sidebar">
     <div class="logo">مهارات <span>رقمية</span></div>
     <div class="role-tag" id="roleTag">جاري التحميل...</div>
-
     <div class="nav-group">
       <div class="nav-group-title">الرئيسية</div>
       <div class="nav-link active" data-section="home"><span class="ico">🏠</span> نظرة عامة</div>
     </div>
-
     <div class="nav-group" id="teacherNav">
       <div class="nav-group-title">المحتوى</div>
       <div class="nav-link" data-section="portfolio"><span class="ico">📁</span> ملف إنجاز المعلم</div>
@@ -29,12 +24,11 @@
       <div class="nav-link" data-section="presentations"><span class="ico">🖥️</span> العروض التقديمية</div>
       <div class="nav-link" data-section="exams"><span class="ico">📝</span> الاختبارات</div>
       <div class="nav-link" data-section="worksheets"><span class="ico">🧾</span> أوراق العمل</div>
+      <div class="nav-link" data-section="lessons"><span class="ico">🎮</span> الحصة التفاعلية</div>
       <div class="nav-link" data-section="sharelinks"><span class="ico">🔗</span> روابط المشاركة</div>
     </div>
-
     <div class="logout" id="logoutBtn">🚪 تسجيل الخروج</div>
   </aside>
-
   <main class="main-area">
     <div class="topbar">
       <button class="hamburger" id="hamburger">☰</button>
@@ -44,12 +38,9 @@
         <span id="userName">جاري التحميل...</span>
       </div>
     </div>
-
     <div id="contentArea"></div>
   </main>
-
 </div>
-
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal-box">
     <h3 id="modalTitle">إضافة عنصر</h3>
@@ -62,7 +53,6 @@
     </form>
   </div>
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/dashboard.js"></script>
@@ -70,5 +60,6 @@
 <script src="js/classes.js"></script>
 <script src="js/grading.js"></script>
 <script src="js/sharelinks.js"></script>
+<script src="js/lessons.js"></script>
 </body>
 </html>
