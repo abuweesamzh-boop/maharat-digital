@@ -69,7 +69,7 @@ document.querySelectorAll(".nav-link").forEach((link) => {
     else if (section === "worksheets") renderWorksheetsSection();
     else if (section === "classes") renderClassesSection();
     else if (section === "sharelinks") renderShareLinksSection();
-    else if (section === "lessons") renderLessonsSection();
+    else if (section === "externallinks") renderExternalLinksSection();
     else renderComingSoon(link.textContent.trim());
     document.getElementById("sidebar").classList.remove("open");
   });
