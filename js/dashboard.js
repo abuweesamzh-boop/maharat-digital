@@ -29,8 +29,8 @@ async function loadHomeStats() {
     <div class="stat-grid" id="statGrid">
       <div class="stat-card"><div class="num">–</div><div class="lbl">عناصر ملف الإنجاز</div></div>
       <div class="stat-card"><div class="num">–</div><div class="lbl">الطلاب المسجلين</div></div>
-      <div class="stat-card"><div class="num">–</div><div class="lbl">العروض التقديمية</div></div>
-      <div class="stat-card"><div class="num">–</div><div class="lbl">الاختبارات</div></div>
+      <div class="stat-card"><div class="num">–</div><div class="lbl">الفصول الدراسية</div></div>
+      <div class="stat-card"><div class="num">–</div><div class="lbl">روابط الصفوف</div></div>
     </div>
     <div class="section-card">
       <div class="section-head"><h3>مرحباً، ${currentProfile.full_name} 👋</h3></div>
@@ -38,17 +38,17 @@ async function loadHomeStats() {
     </div>
   `;
   if (currentProfile.role === "teacher") {
-    const [portfolio, students, presentations, exams] = await Promise.all([
+    const [portfolio, students, classes, extLinks] = await Promise.all([
       supabaseClient.from("content_items").select("id, content_sections!inner(module)", { count: "exact", head: true }).eq("content_sections.module", "portfolio"),
       supabaseClient.from("students").select("id", { count: "exact", head: true }),
-      supabaseClient.from("content_items").select("id, content_sections!inner(module)", { count: "exact", head: true }).eq("content_sections.module", "presentations"),
-      supabaseClient.from("content_items").select("id, content_sections!inner(module)", { count: "exact", head: true }).eq("content_sections.module", "exams"),
+      supabaseClient.from("classes").select("id", { count: "exact", head: true }),
+      supabaseClient.from("external_links").select("id", { count: "exact", head: true }),
     ]);
     const nums = document.querySelectorAll("#statGrid .num");
     nums[0].textContent = portfolio.count ?? 0;
     nums[1].textContent = students.count ?? 0;
-    nums[2].textContent = presentations.count ?? 0;
-    nums[3].textContent = exams.count ?? 0;
+    nums[2].textContent = classes.count ?? 0;
+    nums[3].textContent = extLinks.count ?? 0;
   }
 }
 
@@ -64,9 +64,6 @@ document.querySelectorAll(".nav-link").forEach((link) => {
     const section = link.dataset.section;
     if (section === "home") { document.getElementById("pageTitle").textContent = "نظرة عامة"; loadHomeStats(); }
     else if (section === "portfolio") renderPortfolioSection();
-    else if (section === "presentations") renderPresentationsSection();
-    else if (section === "exams") renderExamsSection();
-    else if (section === "worksheets") renderWorksheetsSection();
     else if (section === "classes") renderClassesSection();
     else if (section === "sharelinks") renderShareLinksSection();
     else if (section === "externallinks") renderExternalLinksSection();

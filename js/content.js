@@ -41,6 +41,7 @@ async function renderFolderView() {
 
   contentArea.innerHTML = `
     ${breadcrumbHtml}
+    ${!parentId ? `<div class="section-card" style="margin-bottom:18px;"><div class="section-head"><h3>📊 لوحة إحصائيات المرفقات</h3></div><div id="dashboardStatsHolder" class="stat-grid"><div class="empty-state">جاري الحساب...</div></div></div>` : ""}
     <div class="section-card" style="margin-bottom:18px;">
       <div class="section-head">
         <h3>الأقسام الفرعية</h3>
@@ -59,6 +60,41 @@ async function renderFolderView() {
 
   await loadSubFolders(parentId);
   if (parentId) await loadItems(parentId);
+  if (!parentId) await loadDashboardStats();
+}
+
+async function getAllDescendantSectionIds(rootId) {
+  let ids = [];
+  let frontier = [rootId];
+  while (frontier.length > 0) {
+    const { data: children } = await supabaseClient.from("content_sections").select("id").in("parent_id", frontier);
+    const childIds = (children || []).map((c) => c.id);
+    ids = ids.concat(childIds);
+    frontier = childIds;
+  }
+  return ids;
+}
+
+async function loadDashboardStats() {
+  const holder = document.getElementById("dashboardStatsHolder");
+  const { data: roots, error } = await supabaseClient.from("content_sections").select("*").eq("module", currentModule).is("parent_id", null).order("created_at", { ascending: true });
+
+  if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
+  if (!roots || roots.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه أقسام بعد لعرض الإحصائيات</div>`; return; }
+
+  const counts = await Promise.all(roots.map(async (r) => {
+    const descendants = await getAllDescendantSectionIds(r.id);
+    const allIds = [r.id, ...descendants];
+    const { count } = await supabaseClient.from("content_items").select("id", { count: "exact", head: true }).in("section_id", allIds);
+    return count ?? 0;
+  }));
+
+  const total = counts.reduce((a, b) => a + b, 0);
+
+  holder.innerHTML = `
+    <div class="stat-card"><div class="num">${total}</div><div class="lbl">إجمالي كل المرفقات</div></div>
+    ${roots.map((r, i) => `<div class="stat-card"><div class="num">${counts[i]}</div><div class="lbl">${escapeHtml(r.title)}</div></div>`).join("")}
+  `;
 }
 
 async function loadSubFolders(parentId) {
@@ -154,6 +190,7 @@ function openAddItemModal(sectionId, sectionTitle) {
     ${showDate ? `<div class="field"><label>تاريخ الاختبار</label><input type="date" id="f_date" /></div>` : ""}
     <div class="field"><label>الوصف (اختياري)</label><input type="text" id="f_description" /></div>
     <div class="field"><label>الملف (أي صيغة)</label><input type="file" id="f_file" /></div>
+    <div class="field"><label>📷 أو التقط صورة مباشرة بالكاميرا</label><input type="file" id="f_camera" accept="image/*" capture="environment" /></div>
   `;
   document.getElementById("modalOverlay").classList.add("show");
   document.getElementById("modalForm").onsubmit = async (e) => { e.preventDefault(); await submitItem(sectionId); };
@@ -167,7 +204,7 @@ async function submitItem(sectionId) {
   const description = document.getElementById("f_description").value.trim();
   const dateField = document.getElementById("f_date");
   const itemDate = dateField ? dateField.value : null;
-  const file = document.getElementById("f_file").files[0];
+  const file = document.getElementById("f_camera").files[0] || document.getElementById("f_file").files[0];
   let fileUrl = null, fileType = null;
   try {
     if (file) {

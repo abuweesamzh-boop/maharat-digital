@@ -5,7 +5,7 @@ let viewCurrentModule = null;
 let viewCurrentClass = null;
 let viewReportPeriod = "p1";
 
-const MODULE_LABELS_VIEW = { portfolio: "ملف إنجاز المعلم", presentations: "العروض التقديمية", exams: "الاختبارات", worksheets: "أوراق العمل" };
+const MODULE_LABELS_VIEW = { portfolio: "ملف إنجاز المعلم" };
 const COMPONENT_DEFS_VIEW = [
   { key: "participation", label: "المشاركة", target: 10, field: "participation" },
   { key: "homework", label: "الواجبات", target: 10, field: "homework" },
@@ -34,7 +34,7 @@ function renderTabs() {
   contentEl.innerHTML = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;" id="viewTabsRow"></div><div id="viewTabBody"></div>`;
   const tabs = [
     { key: "tracking", label: "📋 سجل المتابعة" }, { key: "portfolio", label: "📁 ملف إنجاز المعلم" },
-    { key: "presentations", label: "🖥️ العروض التقديمية" }, { key: "exams", label: "📝 الاختبارات" }, { key: "worksheets", label: "🧾 أوراق العمل" },
+    { key: "extlinks", label: "🚀 مهارات رقمية - الصفوف" },
   ];
   const tabsRow = document.getElementById("viewTabsRow");
   tabsRow.innerHTML = tabs.map((t) => `<button type="button" class="btn-secondary view-tab-btn" data-tab="${t.key}" style="width:auto; padding:10px 16px;">${t.label}</button>`).join("");
@@ -59,7 +59,27 @@ function updateTabStyles() {
 
 function renderTabBody() {
   if (viewTab === "tracking") renderTrackingTab();
+  else if (viewTab === "extlinks") renderExtLinksViewTab();
   else { viewCurrentModule = viewTab; renderFolderTab(); }
+}
+
+function renderExtLinksViewTab() {
+  const body = document.getElementById("viewTabBody");
+  const links = SHARED.external_links || [];
+  if (links.length === 0) { body.innerHTML = `<div class="section-card"><div class="empty-state">ما فيه روابط مضافة بعد</div></div>`; return; }
+  const colors = ["#2DD8C8", "#F5A623", "#B892FF", "#FF7A8A", "#5FD068", "#5FA8FF"];
+  body.innerHTML = `
+    <div class="section-card"><div class="section-head"><h3>الصفوف الدراسية</h3></div>
+      <div class="folder-grid">
+        ${links.map((l, i) => `
+          <div class="folder-card" style="--folder-color:${colors[(l.color_index ?? i) % colors.length]}" onclick="window.open('${l.url}', '_blank')">
+            ${l.image_url ? `<img src="${l.image_url}" style="width:44px; height:44px; border-radius:12px; object-fit:cover; margin-bottom:16px;" />` : `<div class="folder-avatar">${(l.title || "?").charAt(0)}</div>`}
+            <div class="folder-title">${escapeHtml(l.title)}</div>
+            <div class="folder-meta">🔗 فتح الرابط</div>
+          </div>
+        `).join("")}
+      </div>
+    </div>`;
 }
 
 function renderTrackingTab() {
