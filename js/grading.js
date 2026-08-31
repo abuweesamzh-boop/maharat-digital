@@ -360,9 +360,12 @@ async function loadReportBody() {
   const bodyEl = document.getElementById("reportBody");
   bodyEl.innerHTML = `<div class="empty-state">جاري التحميل...</div>`;
   const r = await fetchStudentResults(reportStudent.id, reportPeriod);
+  const { continuousTotal, examsTotal } = calcSubtotals(r.results);
   bodyEl.innerHTML = `
     <div class="stat-grid" style="margin-bottom:18px;">
       <div class="stat-card"><div class="num">${r.total}</div><div class="lbl">الدرجة الإجمالية من 100</div></div>
+      <div class="stat-card"><div class="num">${continuousTotal}</div><div class="lbl">مجموع أعمال السنة من 40</div></div>
+      <div class="stat-card"><div class="num">${examsTotal}</div><div class="lbl">مجموع الاختبارات من 60</div></div>
       <div class="stat-card"><div class="num">${r.attendanceRate !== null ? r.attendanceRate + "%" : "—"}</div><div class="lbl">نسبة الحضور (${r.presentCount}/${r.totalSessions})</div></div>
     </div>
     <div class="component-ring-grid">${r.results.map((c) => `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div><div style="font-size:10px; color:var(--text-muted); margin-top:4px;">${c.count} ${c.key.includes("exam") ? "اختبار" : "حصة"} مسجلة</div></div>`).join("")}</div>`;
@@ -536,16 +539,16 @@ async function renderClassReport(classId, classTitle) {
     <button class="btn-back no-print" onclick="openClass('${classId}', '${escapeAttr(classTitle)}')">← رجوع للفصل</button>
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
       <div class="period-toggle" id="reportClassPeriodToggle" style="margin-bottom:0;"><button data-p="p1" class="active">الفترة الأولى</button><button data-p="p2">الفترة الثانية</button></div>
-      <div class="no-print" style="display:flex; gap:10px;">
-        <button class="btn-secondary" style="width:auto; padding:10px 16px;" onclick="window.print()">🖨️ طباعة الجدول</button>
+      <div class="no-print" style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-secondary" style="width:auto; padding:10px 16px;" onclick="printClassReportTable('${escapeAttr(classTitle)}')">🖨️ طباعة الجدول (أفقي)</button>
         <button class="btn-secondary" style="width:auto; padding:10px 16px;" onclick="exportClassReportExcel('${escapeAttr(classTitle)}')">📥 تصدير إكسل</button>
         <button class="btn-add" onclick="printAllStudentReports('${classId}', '${escapeAttr(classTitle)}')">🖨️ طباعة تقارير كل الطلاب</button>
       </div>
     </div>
     <div class="section-card">
       <div class="grade-table-wrap"><table class="grade-table class-report-table" id="classReportTable">
-        <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>تحريري</th><th>عملي</th><th>الإجمالي</th><th>الحضور</th><th>🟢</th><th>🔴</th></tr></thead>
-        <tbody id="classReportBody"><tr><td colspan="11" class="empty-state">جاري التحميل...</td></tr></tbody>
+        <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>المجموع (40)</th><th>تحريري</th><th>عملي</th><th>المجموع (60)</th><th>الإجمالي</th><th>الحضور</th><th>🟢</th><th>🔴</th></tr></thead>
+        <tbody id="classReportBody"><tr><td colspan="13" class="empty-state">جاري التحميل...</td></tr></tbody>
       </table></div>
     </div>`;
   let period = "p1";
@@ -558,6 +561,13 @@ async function renderClassReport(classId, classTitle) {
     });
   });
   await loadClassReportBody(classId, period, classTitle);
+}
+
+function calcSubtotals(results) {
+  // results بترتيب ثابت: مشاركة، واجبات، مهام أدائية، تطبيق عملي، تحريري، عملي
+  const continuousTotal = Math.round((results[0].avg + results[1].avg + results[2].avg + results[3].avg) * 100) / 100;
+  const examsTotal = Math.round((results[4].avg + results[5].avg) * 100) / 100;
+  return { continuousTotal, examsTotal };
 }
 
 async function loadClassReportBody(classId, period, classTitle) {
@@ -579,37 +589,99 @@ async function loadClassReportBody(classId, period, classTitle) {
 
   classReportCache = { classId, period, classTitle, rowsData };
 
-  body.innerHTML = rowsData.map((r) => `
+  body.innerHTML = rowsData.map((r) => {
+    const { continuousTotal, examsTotal } = calcSubtotals(r.results);
+    return `
     <tr style="cursor:pointer;" onclick="openStudentReport('${r.student.id}', '${escapeAttr(r.student.full_name)}', {id:'${classId}', title:'${escapeAttr(classTitle)}'})">
       <td class="student-name-cell">${escapeHtml(r.student.full_name)}</td>
-      ${r.results.map((c) => `<td>${c.avg}</td>`).join("")}
+      <td>${r.results[0].avg}</td><td>${r.results[1].avg}</td><td>${r.results[2].avg}</td><td>${r.results[3].avg}</td>
+      <td style="font-weight:700;">${continuousTotal}</td>
+      <td>${r.results[4].avg}</td><td>${r.results[5].avg}</td>
+      <td style="font-weight:700;">${examsTotal}</td>
       <td style="font-weight:700; color:var(--accent-cyan);">${r.total}</td><td>${r.attendanceStr}</td><td>${r.posCount}</td><td>${r.negCount}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
 }
 
 function exportClassReportExcel(classTitle) {
   if (!classReportCache) return;
-  const headers = ["الطالب", "المشاركة", "الواجبات", "المهام الأدائية", "التطبيق العملي", "التحريري", "العملي", "الإجمالي", "الحضور", "ملاحظات إيجابية", "ملاحظات سلبية"];
-  const rows = classReportCache.rowsData.map((r) => [r.student.full_name, ...r.results.map((c) => c.avg), r.total, r.attendanceStr, r.posCount, r.negCount]);
+  const headers = ["الطالب", "المشاركة", "الواجبات", "المهام الأدائية", "التطبيق العملي", "المجموع (40)", "التحريري", "العملي", "المجموع (60)", "الإجمالي", "الحضور", "ملاحظات إيجابية", "ملاحظات سلبية"];
+  const rows = classReportCache.rowsData.map((r) => {
+    const { continuousTotal, examsTotal } = calcSubtotals(r.results);
+    return [r.student.full_name, r.results[0].avg, r.results[1].avg, r.results[2].avg, r.results[3].avg, continuousTotal, r.results[4].avg, r.results[5].avg, examsTotal, r.total, r.attendanceStr, r.posCount, r.negCount];
+  });
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "تقرير الفصل");
   XLSX.writeFile(wb, `تقرير-${classTitle}.xlsx`);
 }
 
+function printClassReportTable(classTitle) {
+  if (!classReportCache) return;
+  const periodLabel = classReportCache.period === "p1" ? "الفترة الأولى" : "الفترة الثانية";
+
+  const win = window.open("", "_blank");
+
+  const rowsHtml = classReportCache.rowsData.map((r) => {
+    const { continuousTotal, examsTotal } = calcSubtotals(r.results);
+    return `
+      <tr>
+        <td style="text-align:right; font-weight:600;">${escapeHtml(r.student.full_name)}</td>
+        <td>${r.results[0].avg}</td><td>${r.results[1].avg}</td><td>${r.results[2].avg}</td><td>${r.results[3].avg}</td>
+        <td style="font-weight:700; background:#f5f5f5;">${continuousTotal}</td>
+        <td>${r.results[4].avg}</td><td>${r.results[5].avg}</td>
+        <td style="font-weight:700; background:#f5f5f5;">${examsTotal}</td>
+        <td style="font-weight:800;">${r.total}</td><td>${r.attendanceStr}</td><td>${r.posCount}</td><td>${r.negCount}</td>
+      </tr>`;
+  }).join("");
+
+  win.document.write(`
+    <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقرير ${escapeHtml(classTitle)}</title>
+    <style>
+      @page { size: landscape; margin: 10mm; }
+      body { font-family: Tajawal, Arial, sans-serif; direction: rtl; margin: 0; padding: 20px; }
+      h2 { margin-bottom: 4px; }
+      p { color: #555; margin-bottom: 16px; }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      th, td { border: 1px solid #999; padding: 6px 8px; text-align: center; }
+      thead th { background: #eee; }
+    </style>
+    </head><body>
+      <h2>تقرير الفصل: ${escapeHtml(classTitle)}</h2>
+      <p>${periodLabel}</p>
+      <table>
+        <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>المجموع (40)</th><th>تحريري</th><th>عملي</th><th>المجموع (60)</th><th>الإجمالي</th><th>الحضور</th><th>🟢</th><th>🔴</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </body></html>
+  `);
+  win.document.close();
+  setTimeout(() => win.print(), 400);
+}
+
 async function printAllStudentReports(classId, classTitle) {
   if (!classReportCache || classReportCache.classId !== classId) return;
   const periodLabel = classReportCache.period === "p1" ? "الفترة الأولى" : "الفترة الثانية";
-  const studentsHtml = classReportCache.rowsData.map((r) => `
+  const studentsHtml = classReportCache.rowsData.map((r) => {
+    const { continuousTotal, examsTotal } = calcSubtotals(r.results);
+    return `
     <div style="page-break-after: always; padding: 20px; font-family: Tajawal, Arial, sans-serif; direction: rtl;">
       <h2 style="margin-bottom:4px;">${escapeHtml(r.student.full_name)}</h2>
       <p style="color:#555; margin-bottom:20px;">${escapeHtml(classTitle)} — ${periodLabel}</p>
       <table style="width:100%; border-collapse: collapse; margin-bottom:20px;">
-        <thead><tr style="background:#eee;">${r.results.map((c) => `<th style="border:1px solid #ccc; padding:8px;">${c.label}</th>`).join("")}<th style="border:1px solid #ccc; padding:8px;">الإجمالي</th><th style="border:1px solid #ccc; padding:8px;">الحضور</th></tr></thead>
-        <tbody><tr>${r.results.map((c) => `<td style="border:1px solid #ccc; padding:8px; text-align:center;">${c.avg} / ${c.target}</td>`).join("")}<td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${r.total} / 100</td><td style="border:1px solid #ccc; padding:8px; text-align:center;">${r.attendanceStr}</td></tr></tbody>
+        <thead><tr style="background:#eee;">${r.results.slice(0, 4).map((c) => `<th style="border:1px solid #ccc; padding:8px;">${c.label}</th>`).join("")}<th style="border:1px solid #ccc; padding:8px;">المجموع (40)</th>${r.results.slice(4).map((c) => `<th style="border:1px solid #ccc; padding:8px;">${c.label}</th>`).join("")}<th style="border:1px solid #ccc; padding:8px;">المجموع (60)</th><th style="border:1px solid #ccc; padding:8px;">الإجمالي</th><th style="border:1px solid #ccc; padding:8px;">الحضور</th></tr></thead>
+        <tbody><tr>
+          ${r.results.slice(0, 4).map((c) => `<td style="border:1px solid #ccc; padding:8px; text-align:center;">${c.avg}</td>`).join("")}
+          <td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${continuousTotal}</td>
+          ${r.results.slice(4).map((c) => `<td style="border:1px solid #ccc; padding:8px; text-align:center;">${c.avg}</td>`).join("")}
+          <td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${examsTotal}</td>
+          <td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${r.total} / 100</td>
+          <td style="border:1px solid #ccc; padding:8px; text-align:center;">${r.attendanceStr}</td>
+        </tr></tbody>
       </table>
       <p>ملاحظات إيجابية: ${r.posCount} · ملاحظات سلبية: ${r.negCount}</p>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   const win = window.open("", "_blank");
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقارير ${escapeHtml(classTitle)}</title></head><body>${studentsHtml}</body></html>`);
   win.document.close();
@@ -630,10 +702,14 @@ async function trackSearch(query) {
 // ============================================
 
 async function printClassQRCodes(classId, classTitle) {
-  const { data: students, error } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
-  if (error || !students || students.length === 0) { alert("ما فيه طلاب بهذا الفصل"); return; }
+  // نفتح النافذة فوراً (قبل أي انتظار) عشان المتصفح ما يحظرها كنافذة منبثقة
+  const win = window.open("", "_blank");
+  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>باركودات ${escapeHtml(classTitle)}</title></head><body style="font-family:Tajawal, Arial, sans-serif; padding:40px; text-align:center;"><h2>جاري تجهيز الباركودات...</h2></body></html>`);
+  win.document.close();
 
-  // نولّد رمز لأي طالب ما عنده رمز بعد
+  const { data: students, error } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
+  if (error || !students || students.length === 0) { win.document.body.innerHTML = "<h2>ما فيه طلاب بهذا الفصل</h2>"; return; }
+
   const missing = students.filter((s) => !s.parent_token);
   for (const st of missing) {
     const newToken = crypto.randomUUID().replace(/-/g, "");
@@ -656,10 +732,11 @@ async function printClassQRCodes(classId, classTitle) {
     `;
   }));
 
-  const win = window.open("", "_blank");
+  win.document.open();
   win.document.write(`
     <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>باركودات ${escapeHtml(classTitle)}</title>
     <style>
+      @page { margin: 10mm; }
       body { margin: 20px; }
       h2 { font-family: Tajawal, Arial, sans-serif; margin-bottom: 20px; }
       .qr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }

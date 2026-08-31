@@ -79,9 +79,13 @@ function renderParentReport() {
 
 function fillReportBody() {
   const r = computeResults(pPeriod);
+  const continuousTotal = Math.round((r.results[0].avg + r.results[1].avg + r.results[2].avg + r.results[3].avg) * 100) / 100;
+  const examsTotal = Math.round((r.results[4].avg + r.results[5].avg) * 100) / 100;
   document.getElementById("pReportBody").innerHTML = `
     <div class="stat-grid" style="margin-bottom:18px;">
       <div class="stat-card"><div class="num">${r.total}</div><div class="lbl">الدرجة الإجمالية من 100</div></div>
+      <div class="stat-card"><div class="num">${continuousTotal}</div><div class="lbl">مجموع أعمال السنة من 40</div></div>
+      <div class="stat-card"><div class="num">${examsTotal}</div><div class="lbl">مجموع الاختبارات من 60</div></div>
       <div class="stat-card"><div class="num">${r.attendanceRate !== null ? r.attendanceRate + "%" : "—"}</div><div class="lbl">نسبة الحضور (${r.presentCount}/${r.totalSessions})</div></div>
     </div>
     <div class="component-ring-grid">${r.results.map((c) => `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div></div>`).join("")}</div>

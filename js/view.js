@@ -120,7 +120,7 @@ function renderClassStudentsView() {
     <div class="breadcrumb-nav"><span class="crumb" onclick="viewCurrentClass=null; renderTrackingTab();">سجل المتابعة</span><span>/</span><span class="crumb current">${escapeHtml(viewCurrentClass.title)}</span></div>
     <div class="period-toggle" id="viewPeriodToggle"><button data-p="p1" class="active">الفترة الأولى</button><button data-p="p2">الفترة الثانية</button></div>
     <div class="section-card"><div class="grade-table-wrap"><table class="grade-table class-report-table">
-      <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>تحريري</th><th>عملي</th><th>الإجمالي</th><th>الحضور</th></tr></thead>
+      <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>المجموع (40)</th><th>تحريري</th><th>عملي</th><th>المجموع (60)</th><th>الإجمالي</th><th>الحضور</th></tr></thead>
       <tbody id="viewStudentsBody"></tbody>
     </table></div></div>`;
   document.querySelectorAll("#viewPeriodToggle button").forEach((btn) => {
@@ -136,12 +136,26 @@ function renderClassStudentsView() {
 
 function fillStudentsTable(students) {
   const tbody = document.getElementById("viewStudentsBody");
-  if (students.length === 0) { tbody.innerHTML = `<tr><td colspan="9" class="empty-state">ما فيه طلاب</td></tr>`; return; }
+  if (students.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="empty-state">ما فيه طلاب</td></tr>`; return; }
   tbody.innerHTML = students.map((st) => {
     const r = calcResultsFor(st.id, viewReportPeriod);
+    const { continuousTotal, examsTotal } = calcSubtotalsView(r.results);
     const attStr = r.attendanceRate !== null ? r.attendanceRate + "%" : "—";
-    return `<tr style="cursor:pointer;" onclick="openViewStudentReport('${st.id}')"><td class="student-name-cell">${escapeHtml(st.full_name)}</td>${r.results.map((c) => `<td>${c.avg}</td>`).join("")}<td style="font-weight:700; color:var(--accent-cyan);">${r.total}</td><td>${attStr}</td></tr>`;
+    return `<tr style="cursor:pointer;" onclick="openViewStudentReport('${st.id}')">
+      <td class="student-name-cell">${escapeHtml(st.full_name)}</td>
+      <td>${r.results[0].avg}</td><td>${r.results[1].avg}</td><td>${r.results[2].avg}</td><td>${r.results[3].avg}</td>
+      <td style="font-weight:700;">${continuousTotal}</td>
+      <td>${r.results[4].avg}</td><td>${r.results[5].avg}</td>
+      <td style="font-weight:700;">${examsTotal}</td>
+      <td style="font-weight:700; color:var(--accent-cyan);">${r.total}</td><td>${attStr}</td>
+    </tr>`;
   }).join("");
+}
+
+function calcSubtotalsView(results) {
+  const continuousTotal = Math.round((results[0].avg + results[1].avg + results[2].avg + results[3].avg) * 100) / 100;
+  const examsTotal = Math.round((results[4].avg + results[5].avg) * 100) / 100;
+  return { continuousTotal, examsTotal };
 }
 
 function openViewStudentReport(studentId) {
@@ -149,11 +163,12 @@ function openViewStudentReport(studentId) {
   if (!student) return;
   const body = document.getElementById("viewTabBody");
   const r = calcResultsFor(studentId, viewReportPeriod);
+  const { continuousTotal, examsTotal } = calcSubtotalsView(r.results);
   const notes = (SHARED.behavior_notes || []).filter((n) => n.student_id === studentId).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   body.innerHTML = `
     <div class="breadcrumb-nav"><span class="crumb" onclick="viewCurrentClass=null; renderTrackingTab();">سجل المتابعة</span><span>/</span><span class="crumb" onclick="renderClassStudentsView();">${escapeHtml(viewCurrentClass.title)}</span><span>/</span><span class="crumb current">${escapeHtml(student.full_name)}</span></div>
     <div class="section-card" style="margin-bottom:18px;"><div style="display:flex; align-items:center; gap:16px;"><div class="folder-avatar" style="--folder-color:var(--accent-cyan); width:56px; height:56px; font-size:22px;">${student.full_name.charAt(0)}</div><div><div style="font-family:var(--font-display); font-weight:800; font-size:19px;">${escapeHtml(student.full_name)}</div><div style="color:var(--text-muted); font-size:13px;">${escapeHtml(viewCurrentClass.title)}</div></div></div></div>
-    <div class="stat-grid" style="margin-bottom:18px;"><div class="stat-card"><div class="num">${r.total}</div><div class="lbl">الدرجة الإجمالية من 100</div></div><div class="stat-card"><div class="num">${r.attendanceRate !== null ? r.attendanceRate + "%" : "—"}</div><div class="lbl">نسبة الحضور (${r.presentCount}/${r.totalSessions})</div></div></div>
+    <div class="stat-grid" style="margin-bottom:18px;"><div class="stat-card"><div class="num">${r.total}</div><div class="lbl">الدرجة الإجمالية من 100</div></div><div class="stat-card"><div class="num">${continuousTotal}</div><div class="lbl">مجموع أعمال السنة من 40</div></div><div class="stat-card"><div class="num">${examsTotal}</div><div class="lbl">مجموع الاختبارات من 60</div></div><div class="stat-card"><div class="num">${r.attendanceRate !== null ? r.attendanceRate + "%" : "—"}</div><div class="lbl">نسبة الحضور (${r.presentCount}/${r.totalSessions})</div></div></div>
     <div class="component-ring-grid" style="margin-bottom:20px;">${r.results.map((c) => `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div></div>`).join("")}</div>
     <div class="section-card"><div class="section-head"><h3>📌 ملاحظات السلوك</h3></div>${notes.length === 0 ? `<div class="empty-state">ما فيه ملاحظات</div>` : notes.map((n) => `<div class="behavior-note ${n.note_type}"><div><div class="txt">${n.note_type === "positive" ? "🟢" : "🔴"} ${escapeHtml(n.note)}</div><div class="date">${new Date(n.created_at).toLocaleDateString("ar-SA")}</div></div></div>`).join("")}</div>`;
 }
