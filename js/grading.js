@@ -434,15 +434,13 @@ async function openParentQrModal() {
 
   document.getElementById("modalFields").innerHTML = `
     <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px; line-height:1.8;">هذا الرمز دائم — ولي الأمر يفتحه بأي وقت ويشوف آخر تحديث لتقرير ابنه (الدرجات، الحضور، السلوك). ما يشوف شي ثاني بالموقع.</p>
-    <div style="display:flex; justify-content:center; margin-bottom:16px;"><canvas id="qrCanvas"></canvas></div>
+    <div style="display:flex; justify-content:center; margin-bottom:16px;"><img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(parentLink)}" alt="QR" style="border-radius:12px; border:1px solid var(--border-soft);" /></div>
     <div class="item-row"><div class="info"><div class="d" style="word-break:break-all;">${parentLink}</div></div>
       <div class="actions"><button class="icon-btn" id="qrCopyBtn" title="نسخ">📋</button></div>
     </div>
     <button type="button" class="btn-secondary" id="qrRegenBtn" style="width:100%; margin-top:14px; border-color:var(--danger); color:var(--danger);">🔄 توليد رمز جديد (يلغي القديم)</button>
     <button type="button" class="btn-secondary" id="qrCloseBtn" style="width:100%; margin-top:10px;">إغلاق</button>
   `;
-
-  QRCode.toCanvas(document.getElementById("qrCanvas"), parentLink, { width: 220 });
 
   document.getElementById("qrCopyBtn").addEventListener("click", () => {
     navigator.clipboard.writeText(parentLink);
@@ -702,7 +700,6 @@ async function trackSearch(query) {
 // ============================================
 
 async function printClassQRCodes(classId, classTitle) {
-  // نفتح النافذة فوراً (قبل أي انتظار) عشان المتصفح ما يحظرها كنافذة منبثقة
   const win = window.open("", "_blank");
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>باركودات ${escapeHtml(classTitle)}</title></head><body style="font-family:Tajawal, Arial, sans-serif; padding:40px; text-align:center;"><h2>جاري تجهيز الباركودات...</h2></body></html>`);
   win.document.close();
@@ -719,18 +716,18 @@ async function printClassQRCodes(classId, classTitle) {
 
   const baseUrl = window.location.href.replace(/dashboard\.html.*$/, "");
 
-  const cardsHtml = await Promise.all(students.map(async (st) => {
+  const cardsHtml = students.map((st) => {
     const link = baseUrl + "parent.html?token=" + st.parent_token;
-    const qrDataUrl = await QRCode.toDataURL(link, { width: 160, margin: 1 });
+    const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(link)}`;
     return `
       <div style="border:1px solid #ccc; border-radius:10px; padding:16px; text-align:center; page-break-inside:avoid; font-family:Tajawal, Arial, sans-serif; direction:rtl;">
-        <img src="${qrDataUrl}" style="width:140px; height:140px; margin-bottom:10px;" />
+        <img src="${qrImgUrl}" style="width:140px; height:140px; margin-bottom:10px;" />
         <div style="font-weight:700; font-size:14px; margin-bottom:4px;">${escapeHtml(st.full_name)}</div>
         <div style="font-size:12px; color:#555;">${escapeHtml(st.grade || "")} — ${escapeHtml(classTitle)}</div>
         <div style="font-size:9px; color:#999; margin-top:6px; word-break:break-all;">${st.parent_token}</div>
       </div>
     `;
-  }));
+  });
 
   win.document.open();
   win.document.write(`
@@ -747,5 +744,5 @@ async function printClassQRCodes(classId, classTitle) {
     </body></html>
   `);
   win.document.close();
-  setTimeout(() => win.print(), 500);
+  setTimeout(() => win.print(), 800);
 }
