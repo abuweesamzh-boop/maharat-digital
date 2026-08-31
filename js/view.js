@@ -68,18 +68,9 @@ function renderExtLinksViewTab() {
   const links = SHARED.external_links || [];
   if (links.length === 0) { body.innerHTML = `<div class="section-card"><div class="empty-state">ما فيه روابط مضافة بعد</div></div>`; return; }
   const colors = ["#2DD8C8", "#F5A623", "#B892FF", "#FF7A8A", "#5FD068", "#5FA8FF"];
-  body.innerHTML = `
-    <div class="section-card"><div class="section-head"><h3>الصفوف الدراسية</h3></div>
-      <div class="folder-grid">
-        ${links.map((l, i) => `
-          <div class="folder-card" style="--folder-color:${colors[(l.color_index ?? i) % colors.length]}" onclick="window.open('${l.url}', '_blank')">
-            ${l.image_url ? `<img src="${l.image_url}" style="width:44px; height:44px; border-radius:12px; object-fit:cover; margin-bottom:16px;" />` : `<div class="folder-avatar">${(l.title || "?").charAt(0)}</div>`}
-            <div class="folder-title">${escapeHtml(l.title)}</div>
-            <div class="folder-meta">🔗 فتح الرابط</div>
-          </div>
-        `).join("")}
-      </div>
-    </div>`;
+  body.innerHTML = `<div class="section-card"><div class="section-head"><h3>الصفوف الدراسية</h3></div><div class="folder-grid">
+    ${links.map((l, i) => `<div class="folder-card" style="--folder-color:${colors[(l.color_index ?? i) % colors.length]}" onclick="window.open('${l.url}', '_blank')">${l.image_url ? `<img src="${l.image_url}" style="width:44px; height:44px; border-radius:12px; object-fit:cover; margin-bottom:16px;" />` : `<div class="folder-avatar">${(l.title || "?").charAt(0)}</div>`}<div class="folder-title">${escapeHtml(l.title)}</div><div class="folder-meta">🔗 فتح الرابط</div></div>`).join("")}
+  </div></div>`;
 }
 
 function renderTrackingTab() {
@@ -97,16 +88,16 @@ function renderTrackingTab() {
 
 function openViewClass(classId, title) { viewCurrentClass = { id: classId, title }; renderClassStudentsView(); }
 
-function calcResultsFor(studentId, classId, period) {
-  const sessions = (SHARED.class_sessions || []).filter((s) => s.class_id === classId && s.period === period);
+// درجات الطالب تُحسب من كل جلساته (بغض النظر عن أي فصل)، عشان تشتغل صح حتى للطلاب المنقولين
+function calcResultsFor(studentId, period) {
+  const allSessions = SHARED.class_sessions || [];
   const sessionMap = {};
-  sessions.forEach((s) => (sessionMap[s.id] = s));
-  const sessionIds = sessions.map((s) => s.id);
-  const scores = (SHARED.session_scores || []).filter((sc) => sc.student_id === studentId && sessionIds.includes(sc.session_id));
+  allSessions.forEach((s) => (sessionMap[s.id] = s));
+  const scores = (SHARED.session_scores || []).filter((sc) => sc.student_id === studentId && sessionMap[sc.session_id] && sessionMap[sc.session_id].period === period);
+
   const results = COMPONENT_DEFS_VIEW.map((def) => {
     const relevant = scores.filter((sc) => {
       const sess = sessionMap[sc.session_id];
-      if (!sess) return false;
       if (def.key === "written_exam") return sess.session_kind === "written_exam";
       if (def.key === "practical_exam") return sess.session_kind === "practical_exam";
       return sess.session_kind === "continuous";
@@ -116,7 +107,7 @@ function calcResultsFor(studentId, classId, period) {
     return { ...def, avg: Math.round(avg * 100) / 100, count: values.length };
   });
   const total = Math.round(results.reduce((s, r) => s + r.avg, 0) * 100) / 100;
-  const continuousScores = scores.filter((sc) => sessionMap[sc.session_id] && sessionMap[sc.session_id].session_kind === "continuous");
+  const continuousScores = scores.filter((sc) => sessionMap[sc.session_id].session_kind === "continuous");
   const presentCount = continuousScores.filter((sc) => sc.attendance !== false).length;
   const attendanceRate = continuousScores.length > 0 ? Math.round((presentCount / continuousScores.length) * 100) : null;
   return { results, total, attendanceRate, presentCount, totalSessions: continuousScores.length };
@@ -147,7 +138,7 @@ function fillStudentsTable(students) {
   const tbody = document.getElementById("viewStudentsBody");
   if (students.length === 0) { tbody.innerHTML = `<tr><td colspan="9" class="empty-state">ما فيه طلاب</td></tr>`; return; }
   tbody.innerHTML = students.map((st) => {
-    const r = calcResultsFor(st.id, viewCurrentClass.id, viewReportPeriod);
+    const r = calcResultsFor(st.id, viewReportPeriod);
     const attStr = r.attendanceRate !== null ? r.attendanceRate + "%" : "—";
     return `<tr style="cursor:pointer;" onclick="openViewStudentReport('${st.id}')"><td class="student-name-cell">${escapeHtml(st.full_name)}</td>${r.results.map((c) => `<td>${c.avg}</td>`).join("")}<td style="font-weight:700; color:var(--accent-cyan);">${r.total}</td><td>${attStr}</td></tr>`;
   }).join("");
@@ -157,7 +148,7 @@ function openViewStudentReport(studentId) {
   const student = (SHARED.students || []).find((s) => s.id === studentId);
   if (!student) return;
   const body = document.getElementById("viewTabBody");
-  const r = calcResultsFor(studentId, student.class_id, viewReportPeriod);
+  const r = calcResultsFor(studentId, viewReportPeriod);
   const notes = (SHARED.behavior_notes || []).filter((n) => n.student_id === studentId).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   body.innerHTML = `
     <div class="breadcrumb-nav"><span class="crumb" onclick="viewCurrentClass=null; renderTrackingTab();">سجل المتابعة</span><span>/</span><span class="crumb" onclick="renderClassStudentsView();">${escapeHtml(viewCurrentClass.title)}</span><span>/</span><span class="crumb current">${escapeHtml(student.full_name)}</span></div>

@@ -8,20 +8,14 @@ async function guardAndLoad() {
   const { data: profile, error } = await supabaseClient.from("users_profile").select("*").eq("id", userId).single();
   if (error || !profile) { await supabaseClient.auth.signOut(); window.location.href = "index.html"; return; }
   currentProfile = profile;
-  renderUserInfo(profile);
-  renderNavByRole(profile.role);
-  loadHomeStats();
+  renderUserInfo(profile); renderNavByRole(profile.role); loadHomeStats();
 }
-
 function renderUserInfo(profile) {
   document.getElementById("userName").textContent = profile.full_name;
   document.getElementById("userAvatar").textContent = profile.full_name.charAt(0);
   document.getElementById("roleTag").textContent = "الدور: " + (roleLabels[profile.role] || profile.role);
 }
-
-function renderNavByRole(role) {
-  if (role !== "teacher") document.getElementById("teacherNav").style.display = "none";
-}
+function renderNavByRole(role) { if (role !== "teacher") document.getElementById("teacherNav").style.display = "none"; }
 
 async function loadHomeStats() {
   const contentArea = document.getElementById("contentArea");
@@ -32,11 +26,7 @@ async function loadHomeStats() {
       <div class="stat-card"><div class="num">–</div><div class="lbl">الفصول الدراسية</div></div>
       <div class="stat-card"><div class="num">–</div><div class="lbl">روابط الصفوف</div></div>
     </div>
-    <div class="section-card">
-      <div class="section-head"><h3>مرحباً، ${currentProfile.full_name} 👋</h3></div>
-      <p style="color:var(--text-muted); font-size:14px; line-height:1.9;">استخدم القائمة الجانبية للتنقل بين الأقسام.</p>
-    </div>
-  `;
+    <div class="section-card"><div class="section-head"><h3>مرحباً، ${currentProfile.full_name} 👋</h3></div><p style="color:var(--text-muted); font-size:14px; line-height:1.9;">استخدم القائمة الجانبية للتنقل بين الأقسام.</p></div>`;
   if (currentProfile.role === "teacher") {
     const [portfolio, students, classes, extLinks] = await Promise.all([
       supabaseClient.from("content_items").select("id, content_sections!inner(module)", { count: "exact", head: true }).eq("content_sections.module", "portfolio"),
@@ -52,11 +42,6 @@ async function loadHomeStats() {
   }
 }
 
-function renderComingSoon(title) {
-  document.getElementById("pageTitle").textContent = title;
-  document.getElementById("contentArea").innerHTML = `<div class="section-card"><div class="empty-state"><div class="ico">🚧</div><div>قسم "${title}" قيد الإنشاء</div></div></div>`;
-}
-
 document.querySelectorAll(".nav-link").forEach((link) => {
   link.addEventListener("click", () => {
     document.querySelectorAll(".nav-link").forEach((l) => l.classList.remove("active"));
@@ -67,17 +52,11 @@ document.querySelectorAll(".nav-link").forEach((link) => {
     else if (section === "classes") renderClassesSection();
     else if (section === "sharelinks") renderShareLinksSection();
     else if (section === "externallinks") renderExternalLinksSection();
-    else renderComingSoon(link.textContent.trim());
     document.getElementById("sidebar").classList.remove("open");
   });
 });
 
-document.getElementById("logoutBtn").addEventListener("click", async () => {
-  await supabaseClient.auth.signOut();
-  window.location.href = "index.html";
-});
-document.getElementById("hamburger")?.addEventListener("click", () => {
-  document.getElementById("sidebar").classList.toggle("open");
-});
+document.getElementById("logoutBtn").addEventListener("click", async () => { await supabaseClient.auth.signOut(); window.location.href = "index.html"; });
+document.getElementById("hamburger")?.addEventListener("click", () => { document.getElementById("sidebar").classList.toggle("open"); });
 
 guardAndLoad();

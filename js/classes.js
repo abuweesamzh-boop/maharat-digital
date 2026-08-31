@@ -28,11 +28,7 @@ async function globalStudentSearch(query) {
   if (!query || query.trim().length < 2) { resultsEl.innerHTML = ""; return; }
   const { data, error } = await supabaseClient.from("students").select("*, classes(title)").ilike("full_name", `%${query.trim()}%`).limit(10);
   if (error || !data || data.length === 0) { resultsEl.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه نتائج</div>`; return; }
-  resultsEl.innerHTML = data.map((s) => `
-    <div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}')">
-      <div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">${s.classes ? escapeHtml(s.classes.title) : "بدون فصل"} · الصف ${escapeHtml(s.grade)}</div></div>
-      <div class="actions"><span class="icon-btn">←</span></div>
-    </div>`).join("");
+  resultsEl.innerHTML = data.map((s) => `<div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}')"><div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">${s.classes ? escapeHtml(s.classes.title) : "بدون فصل"} · الصف ${escapeHtml(s.grade)}</div></div><div class="actions"><span class="icon-btn">←</span></div></div>`).join("");
 }
 
 async function loadClasses() {
@@ -41,13 +37,7 @@ async function loadClasses() {
   if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
   if (!classes || classes.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه فصول بعد — أضف فصل جديد للبدء</div>`; return; }
   const counts = await Promise.all(classes.map((c) => supabaseClient.from("students").select("id", { count: "exact", head: true }).eq("class_id", c.id)));
-  holder.innerHTML = classes.map((c, i) => `
-    <div class="folder-card" style="--folder-color:${CLASS_COLORS[i % CLASS_COLORS.length]}" onclick="openClass('${c.id}', '${escapeAttr(c.title)}')">
-      <button class="folder-delete" onclick="event.stopPropagation(); deleteClass('${c.id}')" title="حذف الفصل">✕</button>
-      <div class="folder-avatar">${(c.title || "?").charAt(0)}</div>
-      <div class="folder-title">${escapeHtml(c.title)}</div>
-      <div class="folder-meta">${counts[i].count ?? 0} طالب</div>
-    </div>`).join("");
+  holder.innerHTML = classes.map((c, i) => `<div class="folder-card" style="--folder-color:${CLASS_COLORS[i % CLASS_COLORS.length]}" onclick="openClass('${c.id}', '${escapeAttr(c.title)}')"><button class="folder-delete" onclick="event.stopPropagation(); deleteClass('${c.id}')" title="حذف الفصل">✕</button><div class="folder-avatar">${(c.title || "?").charAt(0)}</div><div class="folder-title">${escapeHtml(c.title)}</div><div class="folder-meta">${counts[i].count ?? 0} طالب</div></div>`).join("");
 }
 
 function escapeHtml(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
@@ -83,6 +73,7 @@ async function openClass(classId, title) {
   document.getElementById("pageTitle").textContent = title;
   const contentArea = document.getElementById("contentArea");
   contentArea.innerHTML = `
+    <button class="btn-back no-print" onclick="renderClassesSection()">← رجوع لسجل المتابعة</button>
     <div class="breadcrumb-nav"><span class="crumb" onclick="renderClassesSection()">سجل المتابعة</span><span>/</span><span class="crumb current">${escapeHtml(title)}</span></div>
     <div class="section-card" style="margin-bottom:18px;">
       <div class="section-head"><h3>استيراد من ملف إكسل</h3></div>
@@ -94,7 +85,11 @@ async function openClass(classId, title) {
     <div class="section-card">
       <div class="section-head">
         <h3>طلاب الفصل</h3>
-        <div style="display:flex; gap:10px; align-items:center;"><input type="text" id="classSearchInput" placeholder="بحث بالاسم..." style="width:200px;" /><button class="btn-add" id="addStudentBtn">+ إضافة طالب</button></div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="text" id="classSearchInput" placeholder="بحث بالاسم..." style="width:200px;" />
+          <button class="btn-secondary" style="width:auto; padding:9px 16px;" id="printQrBtn">🖨️ طباعة باركودات الطلاب</button>
+          <button class="btn-add" id="addStudentBtn">+ إضافة طالب</button>
+        </div>
       </div>
       <div id="studentsHolder"><div class="empty-state">جاري التحميل...</div></div>
     </div>
@@ -103,6 +98,7 @@ async function openClass(classId, title) {
       <div id="gradingAreaHolder"></div>
     </div>`;
   document.getElementById("addStudentBtn").addEventListener("click", () => openAddStudentModal(classId));
+  document.getElementById("printQrBtn").addEventListener("click", () => printClassQRCodes(classId, title));
   document.getElementById("importBtn").addEventListener("click", () => handleExcelImport(classId));
   let searchTimeout;
   document.getElementById("classSearchInput").addEventListener("input", (e) => {
@@ -120,11 +116,7 @@ async function loadClassStudents(classId, query) {
   const { data, error } = await q;
   if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
   if (!data || data.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه طلاب بهذا الفصل بعد</div>`; return; }
-  holder.innerHTML = data.map((s) => `
-    <div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}')">
-      <div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">الصف ${escapeHtml(s.grade)} · رقم ${escapeHtml(s.student_number)}</div></div>
-      <div class="actions"><span class="icon-btn" title="عرض التقرير">←</span><button class="icon-btn danger" onclick="event.stopPropagation(); deleteStudent('${s.id}', '${classId}')" title="حذف">🗑</button></div>
-    </div>`).join("");
+  holder.innerHTML = data.map((s) => `<div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}')"><div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">الصف ${escapeHtml(s.grade)} · رقم ${escapeHtml(s.student_number)}</div></div><div class="actions"><span class="icon-btn" title="عرض التقرير">←</span><button class="icon-btn danger" onclick="event.stopPropagation(); deleteStudent('${s.id}', '${classId}')" title="حذف">🗑</button></div></div>`).join("");
 }
 
 function openAddStudentModal(classId) {

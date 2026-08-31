@@ -1,37 +1,22 @@
 const loginForm = document.getElementById("loginForm");
 const errorBox = document.getElementById("errorBox");
 const loginBtn = document.getElementById("loginBtn");
-
 function showError(msg) { errorBox.textContent = msg; errorBox.classList.add("show"); }
 function hideError() { errorBox.classList.remove("show"); }
-
 (async function checkExistingSession() {
   const { data } = await supabaseClient.auth.getSession();
   if (data.session) window.location.href = "dashboard.html";
 })();
-
 if (loginForm) {
   loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    hideError();
+    e.preventDefault(); hideError();
     const email = document.getElementById("emailInput").value.trim();
     const password = document.getElementById("passwordInput").value;
-    loginBtn.disabled = true;
-    loginBtn.innerHTML = '<span class="loading-spin"></span>';
-
+    loginBtn.disabled = true; loginBtn.innerHTML = '<span class="loading-spin"></span>';
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if (error) {
-      loginBtn.disabled = false; loginBtn.textContent = "دخول";
-      showError("البريد الإلكتروني أو كلمة المرور غير صحيحة");
-      return;
-    }
+    if (error) { loginBtn.disabled = false; loginBtn.textContent = "دخول"; showError("البريد الإلكتروني أو كلمة المرور غير صحيحة"); return; }
     const { data: profile, error: profileError } = await supabaseClient.from("users_profile").select("*").eq("id", data.user.id).single();
-    if (profileError || !profile) {
-      loginBtn.disabled = false; loginBtn.textContent = "دخول";
-      showError("الحساب غير مفعّل بعد. تواصل مع إدارة الموقع.");
-      await supabaseClient.auth.signOut();
-      return;
-    }
+    if (profileError || !profile) { loginBtn.disabled = false; loginBtn.textContent = "دخول"; showError("الحساب غير مفعّل بعد."); await supabaseClient.auth.signOut(); return; }
     window.location.href = "dashboard.html";
   });
 }

@@ -2,16 +2,8 @@ const BUCKET_NAME = "maharat-files";
 const FOLDER_COLORS = ["#2DD8C8", "#F5A623", "#B892FF", "#FF7A8A", "#5FD068", "#5FA8FF", "#FFB74D", "#E879C6"];
 let currentModule = null;
 let navStack = [];
-const MODULE_LABELS = {
-  portfolio: { page: "ملف إنجاز المعلم" },
-  presentations: { page: "العروض التقديمية" },
-  exams: { page: "الاختبارات" },
-  worksheets: { page: "أوراق العمل" },
-};
+const MODULE_LABELS = { portfolio: { page: "ملف إنجاز المعلم" } };
 function renderPortfolioSection() { renderModule("portfolio"); }
-function renderPresentationsSection() { renderModule("presentations"); }
-function renderExamsSection() { renderModule("exams"); }
-function renderWorksheetsSection() { renderModule("worksheets"); }
 function colorFor(i) { return FOLDER_COLORS[i % FOLDER_COLORS.length]; }
 function initials(t) { return (t || "?").trim().charAt(0); }
 function escapeHtml(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
@@ -19,8 +11,7 @@ function escapeAttr(str) { return (str || "").replace(/'/g, "&#39;"); }
 function currentParentId() { return navStack.length ? navStack[navStack.length - 1].id : null; }
 
 async function renderModule(moduleName) {
-  currentModule = moduleName;
-  navStack = [];
+  currentModule = moduleName; navStack = [];
   document.getElementById("pageTitle").textContent = MODULE_LABELS[moduleName].page;
   await renderFolderView();
 }
@@ -40,6 +31,7 @@ async function renderFolderView() {
     </div>`;
 
   contentArea.innerHTML = `
+    ${parentId ? `<button class="btn-back no-print" onclick="${navStack.length > 1 ? `goToCrumb(${navStack.length - 2})` : "goToModuleRoot()"}">← رجوع</button>` : ""}
     ${breadcrumbHtml}
     ${!parentId ? `<div class="section-card" style="margin-bottom:18px;"><div class="section-head"><h3>📊 لوحة إحصائيات المرفقات</h3></div><div id="dashboardStatsHolder" class="stat-grid"><div class="empty-state">جاري الحساب...</div></div></div>` : ""}
     <div class="section-card" style="margin-bottom:18px;">
@@ -64,13 +56,11 @@ async function renderFolderView() {
 }
 
 async function getAllDescendantSectionIds(rootId) {
-  let ids = [];
-  let frontier = [rootId];
+  let ids = []; let frontier = [rootId];
   while (frontier.length > 0) {
     const { data: children } = await supabaseClient.from("content_sections").select("id").in("parent_id", frontier);
     const childIds = (children || []).map((c) => c.id);
-    ids = ids.concat(childIds);
-    frontier = childIds;
+    ids = ids.concat(childIds); frontier = childIds;
   }
   return ids;
 }
@@ -78,23 +68,16 @@ async function getAllDescendantSectionIds(rootId) {
 async function loadDashboardStats() {
   const holder = document.getElementById("dashboardStatsHolder");
   const { data: roots, error } = await supabaseClient.from("content_sections").select("*").eq("module", currentModule).is("parent_id", null).order("created_at", { ascending: true });
-
   if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
   if (!roots || roots.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه أقسام بعد لعرض الإحصائيات</div>`; return; }
-
   const counts = await Promise.all(roots.map(async (r) => {
     const descendants = await getAllDescendantSectionIds(r.id);
     const allIds = [r.id, ...descendants];
     const { count } = await supabaseClient.from("content_items").select("id", { count: "exact", head: true }).in("section_id", allIds);
     return count ?? 0;
   }));
-
   const total = counts.reduce((a, b) => a + b, 0);
-
-  holder.innerHTML = `
-    <div class="stat-card"><div class="num">${total}</div><div class="lbl">إجمالي كل المرفقات</div></div>
-    ${roots.map((r, i) => `<div class="stat-card"><div class="num">${counts[i]}</div><div class="lbl">${escapeHtml(r.title)}</div></div>`).join("")}
-  `;
+  holder.innerHTML = `<div class="stat-card"><div class="num">${total}</div><div class="lbl">إجمالي كل المرفقات</div></div>${roots.map((r, i) => `<div class="stat-card"><div class="num">${counts[i]}</div><div class="lbl">${escapeHtml(r.title)}</div></div>`).join("")}`;
 }
 
 async function loadSubFolders(parentId) {
@@ -104,23 +87,15 @@ async function loadSubFolders(parentId) {
   const { data: sections, error } = await q;
   if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
   if (!sections || sections.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه أقسام فرعية بعد</div>`; return; }
-
   const counts = await Promise.all(sections.map((s) =>
     Promise.all([
       supabaseClient.from("content_sections").select("id", { count: "exact", head: true }).eq("parent_id", s.id),
       supabaseClient.from("content_items").select("id", { count: "exact", head: true }).eq("section_id", s.id),
     ])
   ));
-
   holder.innerHTML = `<div class="folder-grid">` + sections.map((s, i) => {
     const [subCount, itemCount] = counts[i];
-    return `
-    <div class="folder-card" style="--folder-color:${colorFor(s.color_index ?? i)}" onclick="enterFolder('${s.id}', '${escapeAttr(s.title)}')">
-      <button class="folder-delete" onclick="event.stopPropagation(); deleteFolder('${s.id}')" title="حذف">✕</button>
-      <div class="folder-avatar">${initials(s.title)}</div>
-      <div class="folder-title">${escapeHtml(s.title)}</div>
-      <div class="folder-meta">${subCount.count ?? 0} قسم فرعي · ${itemCount.count ?? 0} مرفق</div>
-    </div>`;
+    return `<div class="folder-card" style="--folder-color:${colorFor(s.color_index ?? i)}" onclick="enterFolder('${s.id}', '${escapeAttr(s.title)}')"><button class="folder-delete" onclick="event.stopPropagation(); deleteFolder('${s.id}')" title="حذف">✕</button><div class="folder-avatar">${initials(s.title)}</div><div class="folder-title">${escapeHtml(s.title)}</div><div class="folder-meta">${subCount.count ?? 0} قسم فرعي · ${itemCount.count ?? 0} مرفق</div></div>`;
   }).join("") + `</div>`;
 }
 
@@ -133,14 +108,8 @@ async function loadItems(sectionId) {
   if (!data || data.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه مرفقات بهذا القسم بعد</div>`; return; }
   holder.innerHTML = data.map((item) => `
     <div class="item-row">
-      <div class="info">
-        <div class="t">${escapeHtml(item.title)}</div>
-        <div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div>
-      </div>
-      <div class="actions">
-        ${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">👁</a>` : ""}
-        <button class="icon-btn danger" onclick="deleteItem('${item.id}')" title="حذف">✕</button>
-      </div>
+      <div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div></div>
+      <div class="actions">${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">👁</a>` : ""}<button class="icon-btn danger" onclick="deleteItem('${item.id}')" title="حذف">✕</button></div>
     </div>`).join("");
 }
 
@@ -148,16 +117,11 @@ function openSectionModal(parentId) {
   document.getElementById("modalTitle").textContent = parentId ? "إضافة قسم فرعي" : "إضافة قسم جديد";
   document.getElementById("modalFields").innerHTML = `
     <div class="field"><label>اسم القسم</label><input type="text" id="s_title" required /></div>
-    <div class="field"><label>اللون</label><div class="color-swatch-row">${FOLDER_COLORS.map((c, i) => `<div class="color-swatch ${i === 0 ? "selected" : ""}" data-index="${i}" style="background:${c}"></div>`).join("")}</div></div>
-  `;
+    <div class="field"><label>اللون</label><div class="color-swatch-row">${FOLDER_COLORS.map((c, i) => `<div class="color-swatch ${i === 0 ? "selected" : ""}" data-index="${i}" style="background:${c}"></div>`).join("")}</div></div>`;
   let selectedColor = 0;
   setTimeout(() => {
     document.querySelectorAll(".color-swatch").forEach((sw) => {
-      sw.addEventListener("click", () => {
-        document.querySelectorAll(".color-swatch").forEach((x) => x.classList.remove("selected"));
-        sw.classList.add("selected");
-        selectedColor = parseInt(sw.dataset.index, 10);
-      });
+      sw.addEventListener("click", () => { document.querySelectorAll(".color-swatch").forEach((x) => x.classList.remove("selected")); sw.classList.add("selected"); selectedColor = parseInt(sw.dataset.index, 10); });
     });
   }, 0);
   document.getElementById("modalOverlay").classList.add("show");
@@ -171,6 +135,7 @@ function openSectionModal(parentId) {
     if (error) { alert("تعذر الإضافة: " + error.message); return; }
     document.getElementById("modalOverlay").classList.remove("show");
     await loadSubFolders(parentId);
+    if (!parentId) await loadDashboardStats();
   };
   document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
 }
@@ -180,14 +145,13 @@ async function deleteFolder(id) {
   const { error } = await supabaseClient.from("content_sections").delete().eq("id", id);
   if (error) { alert("تعذر الحذف"); return; }
   await loadSubFolders(currentParentId());
+  if (!currentParentId()) await loadDashboardStats();
 }
 
 function openAddItemModal(sectionId, sectionTitle) {
-  const showDate = currentModule === "exams";
   document.getElementById("modalTitle").textContent = "إضافة مرفق إلى: " + sectionTitle;
   document.getElementById("modalFields").innerHTML = `
     <div class="field"><label>العنوان</label><input type="text" id="f_title" required /></div>
-    ${showDate ? `<div class="field"><label>تاريخ الاختبار</label><input type="date" id="f_date" /></div>` : ""}
     <div class="field"><label>الوصف (اختياري)</label><input type="text" id="f_description" /></div>
     <div class="field"><label>الملف (أي صيغة)</label><input type="file" id="f_file" /></div>
     <div class="field"><label>📷 أو التقط صورة مباشرة بالكاميرا</label><input type="file" id="f_camera" accept="image/*" capture="environment" /></div>
@@ -202,8 +166,6 @@ async function submitItem(sectionId) {
   submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
   const title = document.getElementById("f_title").value.trim();
   const description = document.getElementById("f_description").value.trim();
-  const dateField = document.getElementById("f_date");
-  const itemDate = dateField ? dateField.value : null;
   const file = document.getElementById("f_camera").files[0] || document.getElementById("f_file").files[0];
   let fileUrl = null, fileType = null;
   try {
@@ -212,10 +174,9 @@ async function submitItem(sectionId) {
       const { error: uploadError } = await supabaseClient.storage.from(BUCKET_NAME).upload(filePath, file);
       if (uploadError) throw uploadError;
       const { data: publicUrlData } = supabaseClient.storage.from(BUCKET_NAME).getPublicUrl(filePath);
-      fileUrl = publicUrlData.publicUrl;
-      fileType = file.name.split(".").pop();
+      fileUrl = publicUrlData.publicUrl; fileType = file.name.split(".").pop();
     }
-    const { error: insertError } = await supabaseClient.from("content_items").insert({ title, description, section_id: sectionId, file_url: fileUrl, file_type: fileType, item_date: itemDate || null });
+    const { error: insertError } = await supabaseClient.from("content_items").insert({ title, description, section_id: sectionId, file_url: fileUrl, file_type: fileType });
     if (insertError) throw insertError;
     document.getElementById("modalOverlay").classList.remove("show");
     await loadItems(sectionId);

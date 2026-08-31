@@ -34,9 +34,7 @@ async function generateShareLink() {
   if (error) { alert("تعذر توليد الرابط: " + error.message); return; }
   const baseUrl = window.location.href.replace(/dashboard\.html.*$/, "");
   const fullLink = baseUrl + "view.html?token=" + token;
-  document.getElementById("newLinkResult").innerHTML = `
-    <div class="item-row"><div class="info"><div class="t">✅ تم توليد الرابط</div><div class="d" style="word-break:break-all;">${fullLink}</div></div>
-    <div class="actions"><button class="icon-btn" onclick="navigator.clipboard.writeText('${fullLink}'); this.textContent='✓'; setTimeout(()=>this.textContent='📋',1500);" title="نسخ">📋</button></div></div>`;
+  document.getElementById("newLinkResult").innerHTML = `<div class="item-row"><div class="info"><div class="t">✅ تم توليد الرابط</div><div class="d" style="word-break:break-all;">${fullLink}</div></div><div class="actions"><button class="icon-btn" onclick="navigator.clipboard.writeText('${fullLink}'); this.textContent='✓'; setTimeout(()=>this.textContent='📋',1500);" title="نسخ">📋</button></div></div>`;
   await loadShareLinks();
 }
 
@@ -55,13 +53,7 @@ async function loadShareLinks() {
     else if (isExpired) statusLabel = "⏱️ منتهي الصلاحية";
     const baseUrl = window.location.href.replace(/dashboard\.html.*$/, "");
     const fullLink = baseUrl + "view.html?token=" + link.token;
-    return `
-      <div class="item-row">
-        <div class="info"><div class="t">${statusLabel}</div><div class="d">ينتهي: ${expires.toLocaleString("ar-SA")}</div></div>
-        <div class="actions">
-          ${!isRevoked && !isExpired ? `<button class="icon-btn" onclick="navigator.clipboard.writeText('${fullLink}'); this.textContent='✓'; setTimeout(()=>this.textContent='📋',1500);" title="نسخ الرابط">📋</button><button class="icon-btn danger" onclick="revokeShareLink('${link.id}')" title="إنهاء الآن">⛔</button>` : `<button class="icon-btn danger" onclick="deleteShareLink('${link.id}')" title="حذف من القائمة">🗑</button>`}
-        </div>
-      </div>`;
+    return `<div class="item-row"><div class="info"><div class="t">${statusLabel}</div><div class="d">ينتهي: ${expires.toLocaleString("ar-SA")}</div></div><div class="actions">${!isRevoked && !isExpired ? `<button class="icon-btn" onclick="navigator.clipboard.writeText('${fullLink}'); this.textContent='✓'; setTimeout(()=>this.textContent='📋',1500);" title="نسخ الرابط">📋</button><button class="icon-btn danger" onclick="revokeShareLink('${link.id}')" title="إنهاء الآن">⛔</button>` : `<button class="icon-btn danger" onclick="deleteShareLink('${link.id}')" title="حذف من القائمة">🗑</button>`}</div></div>`;
   }).join("");
 }
 
