@@ -540,7 +540,7 @@ async function deleteBehaviorNote(id) {
 let classReportCache = null;
 
 async function renderClassReport(classId, classTitle) {
-  document.getElementById("pageTitle").textContent = `تقرير الفصل: ${classTitle}`;
+  document.getElementById("pageTitle").textContent = `تقرير الرصد: ${classTitle}`;
   const contentArea = document.getElementById("contentArea");
   contentArea.innerHTML = `
     <button class="btn-back no-print" onclick="openClass('${classId}', '${escapeAttr(classTitle)}')">← رجوع للفصل</button>
@@ -654,7 +654,7 @@ function printClassReportTable(classTitle) {
       thead th { background: #eee; }
     </style>
     </head><body>
-      <h2>تقرير الفصل: ${escapeHtml(classTitle)}</h2>
+      <h2>تقرير الرصد: ${escapeHtml(classTitle)}</h2>
       <p>${periodLabel}</p>
       <table>
         <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>المجموع (40)</th><th>تحريري</th><th>عملي</th><th>المجموع (60)</th><th>الإجمالي</th><th>الحضور</th><th>🟢</th><th>🔴</th></tr></thead>
@@ -763,7 +763,7 @@ async function printClassQRCodes(classId, classTitle) {
 let teacherReportCache = null;
 
 async function renderTeacherSpecialReport(classId, classTitle) {
-  document.getElementById("pageTitle").textContent = `التقرير الخاص: ${classTitle}`;
+  document.getElementById("pageTitle").textContent = `تقرير خاص بالفصل: ${classTitle}`;
   const contentArea = document.getElementById("contentArea");
   contentArea.innerHTML = `
     <button class="btn-back no-print" onclick="openClass('${classId}', '${escapeAttr(classTitle)}')">← رجوع للفصل</button>
@@ -834,7 +834,7 @@ function exportTeacherReportExcel(classTitle) {
   });
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "التقرير الخاص");
+  XLSX.utils.book_append_sheet(wb, ws, "تقرير خاص بالفصل");
   XLSX.writeFile(wb, `التقرير-الخاص-${classTitle}.xlsx`);
 }
 
@@ -854,7 +854,7 @@ function printTeacherReport(classTitle) {
     </tr>`).join("");
 
   win.document.write(`
-    <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>التقرير الخاص ${escapeHtml(classTitle)}</title>
+    <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقرير خاص بالفصل ${escapeHtml(classTitle)}</title>
     <style>
       @page { size: landscape; margin: 10mm; }
       body { font-family: Tajawal, Arial, sans-serif; direction: rtl; margin: 0; padding: 20px; }
@@ -865,7 +865,7 @@ function printTeacherReport(classTitle) {
       thead th { background: #eee; }
     </style>
     </head><body>
-      <h2>التقرير الخاص (للمتابعة والإدارة): ${escapeHtml(classTitle)}</h2>
+      <h2>تقرير خاص بالفصل: ${escapeHtml(classTitle)}</h2>
       <p>${periodLabel} · 🟢 مستوى جيد · 🟡 يحتاج تحسين · 🔴 يحتاج متابعة عاجلة</p>
       <table>
         <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>تحريري</th><th>عملي</th><th>الإجمالي</th></tr></thead>

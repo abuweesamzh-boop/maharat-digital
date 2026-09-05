@@ -102,11 +102,11 @@ async function openClass(classId, title) {
     </div>
 
     <div class="section-card" style="margin-bottom:18px;">
-      <div class="section-head"><h3>📋 التقرير الشامل للفصل</h3></div>
+      <div class="section-head"><h3>📋 تقرير الرصد</h3></div>
       <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">جدول كامل بدرجات كل طلاب الفصل، مع إمكانية الطباعة والتصدير.</p>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn-add" onclick="renderClassReport('${classId}', '${escapeAttr(title)}')">فتح التقرير الشامل</button>
-        <button class="btn-secondary" style="width:auto; padding:11px 18px;" onclick="renderTeacherSpecialReport('${classId}', '${escapeAttr(title)}')">📝 التقرير الخاص (للإدارة)</button>
+        <button class="btn-add" onclick="renderClassReport('${classId}', '${escapeAttr(title)}')">فتح تقرير الرصد</button>
+        <button class="btn-secondary" style="width:auto; padding:11px 18px;" onclick="renderTeacherSpecialReport('${classId}', '${escapeAttr(title)}')">📝 تقرير خاص بالفصل</button>
       </div>
     </div>
 
