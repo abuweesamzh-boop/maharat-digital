@@ -158,6 +158,13 @@ function calcSubtotalsView(results) {
   return { continuousTotal, examsTotal };
 }
 
+function classifyLevelView(avg, target) {
+  const pct = target > 0 ? (avg / target) * 100 : 0;
+  if (pct >= 80) return { emoji: "🟢", label: "مستوى جيد" };
+  if (pct >= 60) return { emoji: "🟡", label: "يحتاج تحسين" };
+  return { emoji: "🔴", label: "يحتاج متابعة عاجلة" };
+}
+
 function openViewStudentReport(studentId) {
   const student = (SHARED.students || []).find((s) => s.id === studentId);
   if (!student) return;
@@ -169,7 +176,10 @@ function openViewStudentReport(studentId) {
     <div class="breadcrumb-nav"><span class="crumb" onclick="viewCurrentClass=null; renderTrackingTab();">سجل المتابعة</span><span>/</span><span class="crumb" onclick="renderClassStudentsView();">${escapeHtml(viewCurrentClass.title)}</span><span>/</span><span class="crumb current">${escapeHtml(student.full_name)}</span></div>
     <div class="section-card" style="margin-bottom:18px;"><div style="display:flex; align-items:center; gap:16px;"><div class="folder-avatar" style="--folder-color:var(--accent-cyan); width:56px; height:56px; font-size:22px;">${student.full_name.charAt(0)}</div><div><div style="font-family:var(--font-display); font-weight:800; font-size:19px;">${escapeHtml(student.full_name)}</div><div style="color:var(--text-muted); font-size:13px;">${escapeHtml(viewCurrentClass.title)}</div></div></div></div>
     <div class="stat-grid" style="margin-bottom:18px;"><div class="stat-card"><div class="num">${r.total}</div><div class="lbl">الدرجة الإجمالية من 100</div></div><div class="stat-card"><div class="num">${continuousTotal}</div><div class="lbl">مجموع أعمال السنة من 40</div></div><div class="stat-card"><div class="num">${examsTotal}</div><div class="lbl">مجموع الاختبارات من 60</div></div><div class="stat-card"><div class="num">${r.attendanceRate !== null ? r.attendanceRate + "%" : "—"}</div><div class="lbl">نسبة الحضور (${r.presentCount}/${r.totalSessions})</div></div></div>
-    <div class="component-ring-grid" style="margin-bottom:20px;">${r.results.map((c) => `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div></div>`).join("")}</div>
+    <div class="component-ring-grid" style="margin-bottom:20px;">${r.results.map((c) => {
+      const lvl = classifyLevelView(c.avg, c.target);
+      return `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div><div style="font-size:11px; margin-top:6px; font-weight:700;">${lvl.emoji} ${lvl.label}</div></div>`;
+    }).join("")}</div>
     <div class="section-card"><div class="section-head"><h3>📌 ملاحظات السلوك</h3></div>${notes.length === 0 ? `<div class="empty-state">ما فيه ملاحظات</div>` : notes.map((n) => `<div class="behavior-note ${n.note_type}"><div><div class="txt">${n.note_type === "positive" ? "🟢" : "🔴"} ${escapeHtml(n.note)}</div><div class="date">${new Date(n.created_at).toLocaleDateString("ar-SA")}</div></div></div>`).join("")}</div>`;
 }
 

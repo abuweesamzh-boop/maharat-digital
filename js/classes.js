@@ -75,38 +75,78 @@ async function openClass(classId, title) {
   contentArea.innerHTML = `
     <button class="btn-back no-print" onclick="renderClassesSection()">← رجوع لسجل المتابعة</button>
     <div class="breadcrumb-nav"><span class="crumb" onclick="renderClassesSection()">سجل المتابعة</span><span>/</span><span class="crumb current">${escapeHtml(title)}</span></div>
-    <div class="section-card" style="margin-bottom:18px;">
+
+    <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
+      <button class="btn-secondary" style="width:auto; padding:11px 18px;" id="toggleSearchBtn">🔍 بحث عن طالب</button>
+      <button class="btn-secondary" style="width:auto; padding:11px 18px;" id="toggleImportBtn">📥 استيراد إكسل</button>
+      <button class="btn-add" id="addStudentBtn">+ إضافة طالب</button>
+    </div>
+
+    <div class="section-card" id="searchPanel" style="margin-bottom:18px; display:none;">
+      <div class="section-head"><h3>🔍 بحث عن طالب بالفصل</h3></div>
+      <input type="text" id="classSearchInput" placeholder="بحث بالاسم..." />
+      <div id="searchInlineResults" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section-card" id="importPanel" style="margin-bottom:18px; display:none;">
       <div class="section-head"><h3>استيراد من ملف إكسل</h3></div>
       <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px; line-height:1.8;">الأعمدة بالترتيب: <b>الاسم</b>، <b>الصف</b>، <b>الرقم</b>.</p>
       <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="margin-bottom:12px;" />
       <div id="importStatus" style="font-size:13px; color:var(--text-muted);"></div>
       <button class="btn-add" id="importBtn" style="margin-top:10px;">📥 استيراد الملف</button>
     </div>
+
+    <div class="section-card" style="margin-bottom:18px;">
+      <div class="section-head"><h3>📊 الحصص والاختبارات</h3></div>
+      <div id="gradingAreaHolder"></div>
+    </div>
+
+    <div class="section-card" style="margin-bottom:18px;">
+      <div class="section-head"><h3>📋 التقرير الشامل للفصل</h3></div>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">جدول كامل بدرجات كل طلاب الفصل، مع إمكانية الطباعة والتصدير.</p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-add" onclick="renderClassReport('${classId}', '${escapeAttr(title)}')">فتح التقرير الشامل</button>
+        <button class="btn-secondary" style="width:auto; padding:11px 18px;" onclick="renderTeacherSpecialReport('${classId}', '${escapeAttr(title)}')">📝 التقرير الخاص (للإدارة)</button>
+      </div>
+    </div>
+
     <div class="section-card">
       <div class="section-head">
         <h3>طلاب الفصل</h3>
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <input type="text" id="classSearchInput" placeholder="بحث بالاسم..." style="width:200px;" />
-          <button class="btn-secondary" style="width:auto; padding:9px 16px;" id="printQrBtn">🖨️ طباعة باركودات الطلاب</button>
-          <button class="btn-add" id="addStudentBtn">+ إضافة طالب</button>
-        </div>
+        <button class="btn-secondary" style="width:auto; padding:9px 16px;" id="printQrBtn">🖨️ طباعة باركودات الطلاب</button>
       </div>
       <div id="studentsHolder"><div class="empty-state">جاري التحميل...</div></div>
-    </div>
-    <div class="section-card" style="margin-top:20px;">
-      <div class="section-head"><h3>📊 الدرجات والتقييم</h3></div>
-      <div id="gradingAreaHolder"></div>
     </div>`;
+
+  document.getElementById("toggleSearchBtn").addEventListener("click", () => {
+    const panel = document.getElementById("searchPanel");
+    panel.style.display = panel.style.display === "none" ? "" : "none";
+  });
+  document.getElementById("toggleImportBtn").addEventListener("click", () => {
+    const panel = document.getElementById("importPanel");
+    panel.style.display = panel.style.display === "none" ? "" : "none";
+  });
+
   document.getElementById("addStudentBtn").addEventListener("click", () => openAddStudentModal(classId));
-  document.getElementById("printQrBtn").addEventListener("click", () => printClassQRCodes(classId, title));
   document.getElementById("importBtn").addEventListener("click", () => handleExcelImport(classId));
+  document.getElementById("printQrBtn").addEventListener("click", () => printClassQRCodes(classId, title));
+
   let searchTimeout;
   document.getElementById("classSearchInput").addEventListener("input", (e) => {
     clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => loadClassStudents(classId, e.target.value), 250);
+    searchTimeout = setTimeout(() => searchWithinClassInline(classId, e.target.value), 250);
   });
+
   await loadClassStudents(classId, "");
   renderGradingArea(classId, title);
+}
+
+async function searchWithinClassInline(classId, query) {
+  const holder = document.getElementById("searchInlineResults");
+  if (!query || query.trim().length < 1) { holder.innerHTML = ""; return; }
+  const { data, error } = await supabaseClient.from("students").select("*").eq("class_id", classId).ilike("full_name", `%${query.trim()}%`);
+  if (error || !data || data.length === 0) { holder.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه نتائج</div>`; return; }
+  holder.innerHTML = data.map((s) => `<div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}', {id:'${classId}', title:'${escapeAttr(currentClass.title)}'})"><div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">الصف ${escapeHtml(s.grade)} · رقم ${escapeHtml(s.student_number)}</div></div><div class="actions"><span class="icon-btn">←</span></div></div>`).join("");
 }
 
 async function loadClassStudents(classId, query) {

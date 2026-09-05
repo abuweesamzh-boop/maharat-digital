@@ -59,9 +59,8 @@ function renderGradingArea(classId, classTitle) {
   gradingClassId = classId; gradingClassTitle = classTitle; gradingPeriod = "p1";
   const holder = document.getElementById("gradingAreaHolder");
   holder.innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+    <div style="margin-bottom:16px;">
       <div class="period-toggle" id="gradingPeriodToggle" style="margin-bottom:0;"><button data-p="p1" class="active">الفترة الأولى</button><button data-p="p2">الفترة الثانية</button></div>
-      <button class="btn-secondary" style="width:auto; padding:10px 18px;" onclick="renderClassReport('${classId}', '${escapeAttr(classTitle)}')">📊 تقرير الفصل الشامل</button>
     </div>
     <div id="gradingKindsHolder"></div>`;
   document.querySelectorAll("#gradingPeriodToggle button").forEach((btn) => {
@@ -356,6 +355,13 @@ function renderReportShell() {
   loadBehaviorNotes();
 }
 
+function classifyLevel(avg, target) {
+  const pct = target > 0 ? (avg / target) * 100 : 0;
+  if (pct >= 80) return { emoji: "🟢", label: "مستوى جيد" };
+  if (pct >= 60) return { emoji: "🟡", label: "يحتاج تحسين" };
+  return { emoji: "🔴", label: "يحتاج متابعة عاجلة" };
+}
+
 async function loadReportBody() {
   const bodyEl = document.getElementById("reportBody");
   bodyEl.innerHTML = `<div class="empty-state">جاري التحميل...</div>`;
@@ -368,7 +374,10 @@ async function loadReportBody() {
       <div class="stat-card"><div class="num">${examsTotal}</div><div class="lbl">مجموع الاختبارات من 60</div></div>
       <div class="stat-card"><div class="num">${r.attendanceRate !== null ? r.attendanceRate + "%" : "—"}</div><div class="lbl">نسبة الحضور (${r.presentCount}/${r.totalSessions})</div></div>
     </div>
-    <div class="component-ring-grid">${r.results.map((c) => `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div><div style="font-size:10px; color:var(--text-muted); margin-top:4px;">${c.count} ${c.key.includes("exam") ? "اختبار" : "حصة"} مسجلة</div></div>`).join("")}</div>`;
+    <div class="component-ring-grid">${r.results.map((c) => {
+      const lvl = classifyLevel(c.avg, c.target);
+      return `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div><div style="font-size:11px; margin-top:6px; font-weight:700;">${lvl.emoji} ${lvl.label}</div></div>`;
+    }).join("")}</div>`;
 }
 
 // ============================================
@@ -745,4 +754,125 @@ async function printClassQRCodes(classId, classTitle) {
   `);
   win.document.close();
   setTimeout(() => win.print(), 800);
+}
+
+// ============================================
+// 11) التقرير الخاص (للمعلم/الإدارة) — مع تصنيف المستوى لكل أداة
+// ============================================
+
+let teacherReportCache = null;
+
+async function renderTeacherSpecialReport(classId, classTitle) {
+  document.getElementById("pageTitle").textContent = `التقرير الخاص: ${classTitle}`;
+  const contentArea = document.getElementById("contentArea");
+  contentArea.innerHTML = `
+    <button class="btn-back no-print" onclick="openClass('${classId}', '${escapeAttr(classTitle)}')">← رجوع للفصل</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+      <div class="period-toggle" id="teacherReportPeriodToggle" style="margin-bottom:0;"><button data-p="p1" class="active">الفترة الأولى</button><button data-p="p2">الفترة الثانية</button></div>
+      <div class="no-print" style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-secondary" style="width:auto; padding:10px 16px;" onclick="printTeacherReport('${escapeAttr(classTitle)}')">🖨️ طباعة (أفقي)</button>
+        <button class="btn-secondary" style="width:auto; padding:10px 16px;" onclick="exportTeacherReportExcel('${escapeAttr(classTitle)}')">📥 تصدير إكسل</button>
+      </div>
+    </div>
+    <p style="color:var(--text-muted); font-size:12px; margin-bottom:14px;">🟢 مستوى جيد (80%+) · 🟡 يحتاج تحسين (60-79%) · 🔴 يحتاج متابعة عاجلة (أقل من 60%)</p>
+    <div class="section-card">
+      <div class="grade-table-wrap"><table class="grade-table class-report-table" id="teacherReportTable">
+        <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>تحريري</th><th>عملي</th><th>الإجمالي</th></tr></thead>
+        <tbody id="teacherReportBody"><tr><td colspan="8" class="empty-state">جاري التحميل...</td></tr></tbody>
+      </table></div>
+    </div>`;
+
+  let period = "p1";
+  document.querySelectorAll("#teacherReportPeriodToggle button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      period = btn.dataset.p;
+      document.querySelectorAll("#teacherReportPeriodToggle button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      loadTeacherReportBody(classId, period, classTitle);
+    });
+  });
+  await loadTeacherReportBody(classId, period, classTitle);
+}
+
+function levelCellHtml(c) {
+  const lvl = classifyLevel(c.avg, c.target);
+  return `<td>${c.avg}<br><span style="font-size:10px;">${lvl.emoji} ${lvl.label}</span></td>`;
+}
+
+async function loadTeacherReportBody(classId, period, classTitle) {
+  const body = document.getElementById("teacherReportBody");
+  body.innerHTML = `<tr><td colspan="8" class="empty-state">جاري التحميل...</td></tr>`;
+  const { data: students } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
+  if (!students || students.length === 0) { body.innerHTML = `<tr><td colspan="8" class="empty-state">ما فيه طلاب بهذا الفصل</td></tr>`; return; }
+
+  const rowsData = await Promise.all(students.map(async (st) => {
+    const r = await fetchStudentResults(st.id, period);
+    return { student: st, results: r.results, total: r.total };
+  }));
+
+  teacherReportCache = { classId, period, classTitle, rowsData };
+
+  body.innerHTML = rowsData.map((r) => `
+    <tr style="cursor:pointer;" onclick="openStudentReport('${r.student.id}', '${escapeAttr(r.student.full_name)}', {id:'${classId}', title:'${escapeAttr(classTitle)}'})">
+      <td class="student-name-cell">${escapeHtml(r.student.full_name)}</td>
+      ${r.results.map((c) => levelCellHtml(c)).join("")}
+      <td style="font-weight:800; color:var(--accent-cyan);">${r.total}</td>
+    </tr>`).join("");
+}
+
+function exportTeacherReportExcel(classTitle) {
+  if (!teacherReportCache) return;
+  const headers = ["الطالب", "المشاركة", "تصنيف", "الواجبات", "تصنيف", "المهام الأدائية", "تصنيف", "التطبيق العملي", "تصنيف", "التحريري", "تصنيف", "العملي", "تصنيف", "الإجمالي"];
+  const rows = teacherReportCache.rowsData.map((r) => {
+    const row = [r.student.full_name];
+    r.results.forEach((c) => {
+      const lvl = classifyLevel(c.avg, c.target);
+      row.push(c.avg, lvl.label);
+    });
+    row.push(r.total);
+    return row;
+  });
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "التقرير الخاص");
+  XLSX.writeFile(wb, `التقرير-الخاص-${classTitle}.xlsx`);
+}
+
+function printTeacherReport(classTitle) {
+  if (!teacherReportCache) return;
+  const periodLabel = teacherReportCache.period === "p1" ? "الفترة الأولى" : "الفترة الثانية";
+  const win = window.open("", "_blank");
+
+  const rowsHtml = teacherReportCache.rowsData.map((r) => `
+    <tr>
+      <td style="text-align:right; font-weight:600;">${escapeHtml(r.student.full_name)}</td>
+      ${r.results.map((c) => {
+        const lvl = classifyLevel(c.avg, c.target);
+        return `<td>${c.avg}<br><span style="font-size:9px;">${lvl.emoji} ${lvl.label}</span></td>`;
+      }).join("")}
+      <td style="font-weight:800;">${r.total}</td>
+    </tr>`).join("");
+
+  win.document.write(`
+    <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>التقرير الخاص ${escapeHtml(classTitle)}</title>
+    <style>
+      @page { size: landscape; margin: 10mm; }
+      body { font-family: Tajawal, Arial, sans-serif; direction: rtl; margin: 0; padding: 20px; }
+      h2 { margin-bottom: 4px; }
+      p { color: #555; margin-bottom: 16px; }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      th, td { border: 1px solid #999; padding: 6px 8px; text-align: center; }
+      thead th { background: #eee; }
+    </style>
+    </head><body>
+      <h2>التقرير الخاص (للمتابعة والإدارة): ${escapeHtml(classTitle)}</h2>
+      <p>${periodLabel} · 🟢 مستوى جيد · 🟡 يحتاج تحسين · 🔴 يحتاج متابعة عاجلة</p>
+      <table>
+        <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>تحريري</th><th>عملي</th><th>الإجمالي</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </body></html>
+  `);
+  win.document.close();
+  setTimeout(() => win.print(), 400);
 }

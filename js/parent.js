@@ -77,6 +77,13 @@ function renderParentReport() {
   fillBehaviorNotes();
 }
 
+function classifyLevelP(avg, target) {
+  const pct = target > 0 ? (avg / target) * 100 : 0;
+  if (pct >= 80) return { emoji: "🟢", label: "مستوى جيد" };
+  if (pct >= 60) return { emoji: "🟡", label: "يحتاج تحسين" };
+  return { emoji: "🔴", label: "يحتاج متابعة عاجلة" };
+}
+
 function fillReportBody() {
   const r = computeResults(pPeriod);
   const continuousTotal = Math.round((r.results[0].avg + r.results[1].avg + r.results[2].avg + r.results[3].avg) * 100) / 100;
@@ -88,7 +95,10 @@ function fillReportBody() {
       <div class="stat-card"><div class="num">${examsTotal}</div><div class="lbl">مجموع الاختبارات من 60</div></div>
       <div class="stat-card"><div class="num">${r.attendanceRate !== null ? r.attendanceRate + "%" : "—"}</div><div class="lbl">نسبة الحضور (${r.presentCount}/${r.totalSessions})</div></div>
     </div>
-    <div class="component-ring-grid">${r.results.map((c) => `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div></div>`).join("")}</div>
+    <div class="component-ring-grid">${r.results.map((c) => {
+      const lvl = classifyLevelP(c.avg, c.target);
+      return `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div><div style="font-size:11px; margin-top:6px; font-weight:700;">${lvl.emoji} ${lvl.label}</div></div>`;
+    }).join("")}</div>
   `;
 }
 
