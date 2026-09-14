@@ -34,7 +34,19 @@ async function generateShareLink() {
   if (error) { alert("تعذر توليد الرابط: " + error.message); return; }
   const baseUrl = window.location.href.replace(/dashboard\.html.*$/, "");
   const fullLink = baseUrl + "view.html?token=" + token;
-  document.getElementById("newLinkResult").innerHTML = `<div class="item-row"><div class="info"><div class="t">تم توليد الرابط</div><div class="d" style="word-break:break-all;">${fullLink}</div></div><div class="actions"><button class="icon-btn" onclick="navigator.clipboard.writeText('${fullLink}'); this.innerHTML='${icon("check", 15)}';" title="نسخ">${icon("copy", 15)}</button></div></div>`;
+  document.getElementById("newLinkResult").innerHTML = `
+    <div class="section-card" style="background:var(--bg-surface-2); box-shadow:none;">
+      <div style="font-weight:700; font-size:13px; margin-bottom:10px; display:flex; align-items:center; gap:8px;">${icon("check", 16)} تم توليد الرابط بنجاح</div>
+      <div style="background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:10px; padding:12px 14px; font-size:13px; word-break:break-all; margin-bottom:12px; direction:ltr; text-align:left;">${fullLink}</div>
+      <button class="btn-add" style="width:100%; justify-content:center;" id="copyNewLinkBtn">${icon("copy", 15)} نسخ الرابط</button>
+    </div>`;
+  document.getElementById("copyNewLinkBtn").addEventListener("click", function () {
+    navigator.clipboard.writeText(fullLink);
+    this.innerHTML = `${icon("check", 15)} تم النسخ`;
+    hydrateIcons(this);
+    setTimeout(() => { this.innerHTML = `${icon("copy", 15)} نسخ الرابط`; hydrateIcons(this); }, 1800);
+  });
+  hydrateIcons(document.getElementById("newLinkResult"));
   await loadShareLinks();
 }
 
@@ -54,9 +66,29 @@ async function loadShareLinks() {
     const baseUrl = window.location.href.replace(/dashboard\.html.*$/, "");
     const fullLink = baseUrl + "view.html?token=" + link.token;
     return `
-      <div class="item-row"><div class="info"><div class="t" style="display:flex; align-items:center; gap:8px;">${icon(statusIcon, 15)} ${statusLabel}</div><div class="d">ينتهي: ${expires.toLocaleString("ar-SA")}</div></div>
-      <div class="actions">${!isRevoked && !isExpired ? `<button class="icon-btn" onclick="navigator.clipboard.writeText('${fullLink}'); this.innerHTML='${icon("check", 15)}';" title="نسخ الرابط">${icon("copy", 15)}</button><button class="icon-btn danger" onclick="revokeShareLink('${link.id}')" title="إنهاء الآن">${icon("ban", 15)}</button>` : `<button class="icon-btn danger" onclick="deleteShareLink('${link.id}')" title="حذف من القائمة">${icon("trash", 15)}</button>`}</div></div>`;
+      <div class="section-card" style="background:var(--bg-surface-2); box-shadow:none; margin-bottom:12px; padding:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:${!isRevoked && !isExpired ? "10px" : "0"};">
+          <div style="font-weight:700; font-size:13px; display:flex; align-items:center; gap:8px;">${icon(statusIcon, 16)} ${statusLabel}</div>
+          <div style="font-size:12px; color:var(--text-muted);">ينتهي: ${expires.toLocaleString("ar-SA")}</div>
+          ${isRevoked || isExpired ? `<button class="icon-btn danger" onclick="deleteShareLink('${link.id}')" title="حذف من القائمة">${icon("trash", 15)}</button>` : ""}
+        </div>
+        ${!isRevoked && !isExpired ? `
+          <div style="background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:10px; padding:10px 12px; font-size:12px; word-break:break-all; margin-bottom:10px; direction:ltr; text-align:left;">${fullLink}</div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-add copy-link-btn" data-link="${fullLink}" style="flex:1; justify-content:center;">${icon("copy", 14)} نسخ الرابط</button>
+            <button class="btn-secondary" style="width:auto; padding:10px 16px; border-color:var(--danger); color:var(--danger);" onclick="revokeShareLink('${link.id}')">${icon("ban", 15)} إنهاء</button>
+          </div>` : ""}
+      </div>`;
   }).join("");
+  document.querySelectorAll(".copy-link-btn").forEach((btn) => {
+    btn.addEventListener("click", function () {
+      navigator.clipboard.writeText(this.dataset.link);
+      const original = this.innerHTML;
+      this.innerHTML = `${icon("check", 14)} تم النسخ`;
+      hydrateIcons(this);
+      setTimeout(() => { this.innerHTML = original; hydrateIcons(this); }, 1800);
+    });
+  });
 }
 
 async function revokeShareLink(id) {
