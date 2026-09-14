@@ -17,6 +17,17 @@ const COMPONENT_DEFS_VIEW = [
 
 function escapeHtml(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
 function escapeAttr(str) { return (str || "").replace(/'/g, "&#39;"); }
+function classifyLevelView(avg, target) {
+  const pct = target > 0 ? (avg / target) * 100 : 0;
+  if (pct >= 80) return { cls: "positive", label: "مستوى جيد" };
+  if (pct >= 60) return { cls: "mid", label: "يحتاج تحسين" };
+  return { cls: "negative", label: "يحتاج متابعة عاجلة" };
+}
+function calcSubtotalsView(results) {
+  const continuousTotal = Math.round((results[0].avg + results[1].avg + results[2].avg + results[3].avg) * 100) / 100;
+  const examsTotal = Math.round((results[4].avg + results[5].avg) * 100) / 100;
+  return { continuousTotal, examsTotal };
+}
 
 async function initView() {
   const params = new URLSearchParams(window.location.search);
@@ -24,7 +35,7 @@ async function initView() {
   const contentEl = document.getElementById("viewContent");
   if (!token) { contentEl.innerHTML = `<div class="section-card"><div class="empty-state">رابط غير صالح.</div></div>`; return; }
   const { data, error } = await supabaseClient.rpc("get_shared_data", { p_token: token });
-  if (error) { contentEl.innerHTML = `<div class="section-card"><div class="empty-state">⛔ هذا الرابط غير صالح أو منتهي الصلاحية أو تم إلغاؤه.</div></div>`; return; }
+  if (error) { contentEl.innerHTML = `<div class="section-card"><div class="empty-state">هذا الرابط غير صالح أو منتهي الصلاحية أو تم إلغاؤه.</div></div>`; return; }
   SHARED = data;
   renderTabs();
 }
@@ -33,11 +44,11 @@ function renderTabs() {
   const contentEl = document.getElementById("viewContent");
   contentEl.innerHTML = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;" id="viewTabsRow"></div><div id="viewTabBody"></div>`;
   const tabs = [
-    { key: "tracking", label: "📋 سجل المتابعة" }, { key: "portfolio", label: "📁 ملف إنجاز المعلم" },
-    { key: "extlinks", label: "🚀 مهارات رقمية - الصفوف" },
+    { key: "tracking", icon: "list", label: "سجل المتابعة" }, { key: "portfolio", icon: "folder", label: "ملف إنجاز المعلم" },
+    { key: "extlinks", icon: "rocket", label: "مهارات رقمية - الصفوف" },
   ];
   const tabsRow = document.getElementById("viewTabsRow");
-  tabsRow.innerHTML = tabs.map((t) => `<button type="button" class="btn-secondary view-tab-btn" data-tab="${t.key}" style="width:auto; padding:10px 16px;">${t.label}</button>`).join("");
+  tabsRow.innerHTML = tabs.map((t) => `<button type="button" class="btn-secondary view-tab-btn" data-tab="${t.key}" style="width:auto; padding:10px 16px;">${icon(t.icon, 15)} ${t.label}</button>`).join("");
   tabsRow.querySelectorAll(".view-tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       viewTab = btn.dataset.tab; viewNavStack = []; viewCurrentClass = null;
@@ -51,9 +62,9 @@ function renderTabs() {
 function updateTabStyles() {
   document.querySelectorAll(".view-tab-btn").forEach((b) => {
     const active = b.dataset.tab === viewTab;
-    b.style.background = active ? "var(--accent-cyan)" : "transparent";
-    b.style.color = active ? "#06231F" : "var(--text-muted)";
-    b.style.borderColor = active ? "var(--accent-cyan)" : "var(--border-soft)";
+    b.style.background = active ? "var(--navy)" : "transparent";
+    b.style.color = active ? "#fff" : "var(--text-muted)";
+    b.style.borderColor = active ? "var(--navy)" : "var(--border-soft)";
   });
 }
 
@@ -67,9 +78,9 @@ function renderExtLinksViewTab() {
   const body = document.getElementById("viewTabBody");
   const links = SHARED.external_links || [];
   if (links.length === 0) { body.innerHTML = `<div class="section-card"><div class="empty-state">ما فيه روابط مضافة بعد</div></div>`; return; }
-  const colors = ["#2DD8C8", "#F5A623", "#B892FF", "#FF7A8A", "#5FD068", "#5FA8FF"];
+  const colors = ["#0F2542", "#B8862E", "#3C6E5A", "#7A4B8A", "#1F6F8B", "#8A4B3C"];
   body.innerHTML = `<div class="section-card"><div class="section-head"><h3>الصفوف الدراسية</h3></div><div class="folder-grid">
-    ${links.map((l, i) => `<div class="folder-card" style="--folder-color:${colors[(l.color_index ?? i) % colors.length]}" onclick="window.open('${l.url}', '_blank')">${l.image_url ? `<img src="${l.image_url}" style="width:44px; height:44px; border-radius:12px; object-fit:cover; margin-bottom:16px;" />` : `<div class="folder-avatar">${(l.title || "?").charAt(0)}</div>`}<div class="folder-title">${escapeHtml(l.title)}</div><div class="folder-meta">🔗 فتح الرابط</div></div>`).join("")}
+    ${links.map((l, i) => `<div class="folder-card" style="--folder-color:${colors[(l.color_index ?? i) % colors.length]}" onclick="window.open('${l.url}', '_blank')">${l.image_url ? `<img src="${l.image_url}" style="width:40px; height:40px; border-radius:10px; object-fit:cover; margin-bottom:10px;" />` : ""}<div class="folder-title">${escapeHtml(l.title)}</div><div class="folder-meta">${icon("link", 12)} فتح الرابط</div></div>`).join("")}
   </div></div>`;
 }
 
@@ -81,20 +92,18 @@ function renderTrackingTab() {
   body.innerHTML = `<div class="section-card"><div class="section-head"><h3>الفصول</h3></div><div class="folder-grid">
     ${classes.map((c, i) => {
       const studentsCount = (SHARED.students || []).filter((s) => s.class_id === c.id).length;
-      return `<div class="folder-card" style="--folder-color:${["#2DD8C8","#F5A623","#B892FF","#FF7A8A","#5FD068","#5FA8FF"][i % 6]}" onclick="openViewClass('${c.id}', '${escapeAttr(c.title)}')"><div class="folder-avatar">${(c.title || "?").charAt(0)}</div><div class="folder-title">${escapeHtml(c.title)}</div><div class="folder-meta">${studentsCount} طالب</div></div>`;
+      return `<div class="folder-card" style="--folder-color:${["#0F2542","#B8862E","#3C6E5A","#7A4B8A","#1F6F8B","#8A4B3C"][i % 6]}" onclick="openViewClass('${c.id}', '${escapeAttr(c.title)}')"><div class="folder-title">${escapeHtml(c.title)}</div><div class="folder-meta">${studentsCount} طالب</div></div>`;
     }).join("")}
   </div></div>`;
 }
 
 function openViewClass(classId, title) { viewCurrentClass = { id: classId, title }; renderClassStudentsView(); }
 
-// درجات الطالب تُحسب من كل جلساته (بغض النظر عن أي فصل)، عشان تشتغل صح حتى للطلاب المنقولين
 function calcResultsFor(studentId, period) {
   const allSessions = SHARED.class_sessions || [];
   const sessionMap = {};
   allSessions.forEach((s) => (sessionMap[s.id] = s));
   const scores = (SHARED.session_scores || []).filter((sc) => sc.student_id === studentId && sessionMap[sc.session_id] && sessionMap[sc.session_id].period === period);
-
   const results = COMPONENT_DEFS_VIEW.map((def) => {
     const relevant = scores.filter((sc) => {
       const sess = sessionMap[sc.session_id];
@@ -147,22 +156,9 @@ function fillStudentsTable(students) {
       <td style="font-weight:700;">${continuousTotal}</td>
       <td>${r.results[4].avg}</td><td>${r.results[5].avg}</td>
       <td style="font-weight:700;">${examsTotal}</td>
-      <td style="font-weight:700; color:var(--accent-cyan);">${r.total}</td><td>${attStr}</td>
+      <td style="font-weight:700; color:var(--navy);">${r.total}</td><td>${attStr}</td>
     </tr>`;
   }).join("");
-}
-
-function calcSubtotalsView(results) {
-  const continuousTotal = Math.round((results[0].avg + results[1].avg + results[2].avg + results[3].avg) * 100) / 100;
-  const examsTotal = Math.round((results[4].avg + results[5].avg) * 100) / 100;
-  return { continuousTotal, examsTotal };
-}
-
-function classifyLevelView(avg, target) {
-  const pct = target > 0 ? (avg / target) * 100 : 0;
-  if (pct >= 80) return { emoji: "🟢", label: "مستوى جيد" };
-  if (pct >= 60) return { emoji: "🟡", label: "يحتاج تحسين" };
-  return { emoji: "🔴", label: "يحتاج متابعة عاجلة" };
 }
 
 function openViewStudentReport(studentId) {
@@ -174,13 +170,10 @@ function openViewStudentReport(studentId) {
   const notes = (SHARED.behavior_notes || []).filter((n) => n.student_id === studentId).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   body.innerHTML = `
     <div class="breadcrumb-nav"><span class="crumb" onclick="viewCurrentClass=null; renderTrackingTab();">سجل المتابعة</span><span>/</span><span class="crumb" onclick="renderClassStudentsView();">${escapeHtml(viewCurrentClass.title)}</span><span>/</span><span class="crumb current">${escapeHtml(student.full_name)}</span></div>
-    <div class="section-card" style="margin-bottom:18px;"><div style="display:flex; align-items:center; gap:16px;"><div class="folder-avatar" style="--folder-color:var(--accent-cyan); width:56px; height:56px; font-size:22px;">${student.full_name.charAt(0)}</div><div><div style="font-family:var(--font-display); font-weight:800; font-size:19px;">${escapeHtml(student.full_name)}</div><div style="color:var(--text-muted); font-size:13px;">${escapeHtml(viewCurrentClass.title)}</div></div></div></div>
+    <div class="section-card" style="margin-bottom:18px;"><div style="font-family:var(--font-display); font-weight:800; font-size:19px;">${escapeHtml(student.full_name)}</div><div style="color:var(--text-muted); font-size:13px;">${escapeHtml(viewCurrentClass.title)}</div></div>
     <div class="stat-grid" style="margin-bottom:18px;"><div class="stat-card"><div class="num">${r.total}</div><div class="lbl">الدرجة الإجمالية من 100</div></div><div class="stat-card"><div class="num">${continuousTotal}</div><div class="lbl">مجموع أعمال السنة من 40</div></div><div class="stat-card"><div class="num">${examsTotal}</div><div class="lbl">مجموع الاختبارات من 60</div></div><div class="stat-card"><div class="num">${r.attendanceRate !== null ? r.attendanceRate + "%" : "—"}</div><div class="lbl">نسبة الحضور (${r.presentCount}/${r.totalSessions})</div></div></div>
-    <div class="component-ring-grid" style="margin-bottom:20px;">${r.results.map((c) => {
-      const lvl = classifyLevelView(c.avg, c.target);
-      return `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div><div style="font-size:11px; margin-top:6px; font-weight:700;">${lvl.emoji} ${lvl.label}</div></div>`;
-    }).join("")}</div>
-    <div class="section-card"><div class="section-head"><h3>📌 ملاحظات السلوك</h3></div>${notes.length === 0 ? `<div class="empty-state">ما فيه ملاحظات</div>` : notes.map((n) => `<div class="behavior-note ${n.note_type}"><div><div class="txt">${n.note_type === "positive" ? "🟢" : "🔴"} ${escapeHtml(n.note)}</div><div class="date">${new Date(n.created_at).toLocaleDateString("ar-SA")}</div></div></div>`).join("")}</div>`;
+    <div class="component-ring-grid" style="margin-bottom:20px;">${r.results.map((c) => { const lvl = classifyLevelView(c.avg, c.target); return `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div><div style="font-size:11px; margin-top:6px; font-weight:700;" class="lvl-${lvl.cls}">${lvl.label}</div></div>`; }).join("")}</div>
+    <div class="section-card"><div class="section-head"><h3>ملاحظات السلوك</h3></div>${notes.length === 0 ? `<div class="empty-state">ما فيه ملاحظات</div>` : notes.map((n) => `<div class="behavior-note ${n.note_type}"><div><div class="txt"><span class="dot-badge ${n.note_type}"></span> ${escapeHtml(n.note)}</div><div class="date">${new Date(n.created_at).toLocaleDateString("ar-SA")}</div></div></div>`).join("")}</div>`;
 }
 
 function renderFolderTab() { viewNavStack = []; renderFolderLevel(); }
@@ -195,9 +188,9 @@ function renderFolderLevel() {
   body.innerHTML = `
     ${breadcrumbHtml}
     <div class="section-card" style="margin-bottom:18px;"><div class="section-head"><h3>الأقسام الفرعية</h3></div>
-      ${subs.length === 0 ? `<div class="empty-state">ما فيه أقسام فرعية</div>` : `<div class="folder-grid">${subs.map((s, i) => `<div class="folder-card" style="--folder-color:${["#2DD8C8","#F5A623","#B892FF","#FF7A8A","#5FD068","#5FA8FF"][(s.color_index ?? i) % 6]}" onclick="viewNavStack.push({id:'${s.id}', title:'${escapeAttr(s.title)}'}); renderFolderLevel();"><div class="folder-avatar">${(s.title || "?").charAt(0)}</div><div class="folder-title">${escapeHtml(s.title)}</div></div>`).join("")}</div>`}
+      ${subs.length === 0 ? `<div class="empty-state">ما فيه أقسام فرعية</div>` : `<div class="folder-grid">${subs.map((s, i) => `<div class="folder-card" style="--folder-color:${["#0F2542","#B8862E","#3C6E5A","#7A4B8A","#1F6F8B","#8A4B3C"][(s.color_index ?? i) % 6]}" onclick="viewNavStack.push({id:'${s.id}', title:'${escapeAttr(s.title)}'}); renderFolderLevel();"><div class="folder-title">${escapeHtml(s.title)}</div></div>`).join("")}</div>`}
     </div>
-    ${parentId ? `<div class="section-card"><div class="section-head"><h3>المرفقات</h3></div>${items.length === 0 ? `<div class="empty-state">ما فيه مرفقات</div>` : items.map((item) => `<div class="item-row"><div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div></div><div class="actions">${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">👁</a>` : ""}</div></div>`).join("")}</div>` : ""}`;
+    ${parentId ? `<div class="section-card"><div class="section-head"><h3>المرفقات</h3></div>${items.length === 0 ? `<div class="empty-state">ما فيه مرفقات</div>` : items.map((item) => `<div class="item-row"><div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div></div><div class="actions">${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">${icon("eye", 15)}</a>` : ""}</div></div>`).join("")}</div>` : ""}`;
 }
 
 initView();

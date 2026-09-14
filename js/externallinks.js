@@ -1,11 +1,11 @@
-const EXT_COLORS = ["#2DD8C8", "#F5A623", "#B892FF", "#FF7A8A", "#5FD068", "#5FA8FF"];
+const EXT_COLORS = ["#0F2542", "#B8862E", "#3C6E5A", "#7A4B8A", "#1F6F8B", "#8A4B3C"];
 
 async function renderExternalLinksSection() {
   document.getElementById("pageTitle").textContent = "مهارات رقمية - الصفوف";
   const contentArea = document.getElementById("contentArea");
   contentArea.innerHTML = `
     <div class="section-card">
-      <div class="section-head"><h3>الصفوف الدراسية</h3><button class="btn-add" id="addExtLinkBtn">+ إضافة رابط جديد</button></div>
+      <div class="section-head"><h3>الصفوف الدراسية</h3><button class="btn-add" id="addExtLinkBtn">${icon("plus", 14)} إضافة رابط جديد</button></div>
       <div id="extLinksHolder" class="folder-grid"><div class="empty-state">جاري التحميل...</div></div>
     </div>`;
   document.getElementById("addExtLinkBtn").addEventListener("click", () => openExtLinkModal());
@@ -19,10 +19,10 @@ async function loadExtLinks() {
   if (!data || data.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه روابط بعد — أضف رابط جديد للبدء</div>`; return; }
   holder.innerHTML = data.map((l, i) => `
     <div class="folder-card" style="--folder-color:${EXT_COLORS[(l.color_index ?? i) % EXT_COLORS.length]}" onclick="window.open('${l.url}', '_blank')">
-      <button class="folder-delete" onclick="event.stopPropagation(); deleteExtLink('${l.id}')" title="حذف">✕</button>
-      ${l.image_url ? `<img src="${l.image_url}" style="width:44px; height:44px; border-radius:12px; object-fit:cover; margin-bottom:16px;" />` : `<div class="folder-avatar">${(l.title || "?").charAt(0)}</div>`}
+      <div class="folder-actions-row"><button class="folder-mini-btn danger" onclick="event.stopPropagation(); deleteExtLink('${l.id}')" title="حذف">${icon("trash", 14)}</button></div>
+      ${l.image_url ? `<img src="${l.image_url}" style="width:40px; height:40px; border-radius:10px; object-fit:cover; margin-bottom:10px;" />` : ""}
       <div class="folder-title">${escapeHtmlExt(l.title)}</div>
-      <div class="folder-meta">🔗 فتح الرابط</div>
+      <div class="folder-meta">${icon("link", 12)} فتح الرابط</div>
     </div>`).join("");
 }
 

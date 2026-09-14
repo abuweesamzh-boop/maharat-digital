@@ -15,20 +15,20 @@
     <div class="role-tag" id="roleTag">جاري التحميل...</div>
     <div class="nav-group">
       <div class="nav-group-title">الرئيسية</div>
-      <div class="nav-link active" data-section="home"><span class="ico">🏠</span> نظرة عامة</div>
+      <div class="nav-link active" data-section="home"><span class="ico" data-icon="home"></span> نظرة عامة</div>
     </div>
     <div class="nav-group" id="teacherNav">
       <div class="nav-group-title">المحتوى</div>
-      <div class="nav-link" data-section="portfolio"><span class="ico">📁</span> ملف إنجاز المعلم</div>
-      <div class="nav-link" data-section="classes"><span class="ico">📋</span> سجل المتابعة</div>
-      <div class="nav-link" data-section="externallinks"><span class="ico">🚀</span> مهارات رقمية - الصفوف</div>
-      <div class="nav-link" data-section="sharelinks"><span class="ico">🔗</span> روابط المشاركة</div>
+      <div class="nav-link" data-section="portfolio"><span class="ico" data-icon="folder"></span> ملف إنجاز المعلم</div>
+      <div class="nav-link" data-section="classes"><span class="ico" data-icon="list"></span> سجل المتابعة</div>
+      <div class="nav-link" data-section="externallinks"><span class="ico" data-icon="rocket"></span> مهارات رقمية - الصفوف</div>
+      <div class="nav-link" data-section="sharelinks"><span class="ico" data-icon="link"></span> روابط المشاركة</div>
     </div>
-    <div class="logout" id="logoutBtn">🚪 تسجيل الخروج</div>
+    <div class="logout" id="logoutBtn"><span class="ico" data-icon="logout"></span> تسجيل الخروج</div>
   </aside>
   <main class="main-area">
     <div class="topbar">
-      <button class="hamburger" id="hamburger">☰</button>
+      <button class="hamburger" id="hamburger"><span class="ico" data-icon="menu"></span></button>
       <h1 id="pageTitle">نظرة عامة</h1>
       <div class="user-chip">
         <div class="avatar" id="userAvatar">؟</div>
@@ -51,6 +51,7 @@
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/content.js"></script>

@@ -11,16 +11,20 @@ let PDATA = null;
 let pPeriod = "p1";
 
 function escapeHtmlP(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
+function classifyLevelP(avg, target) {
+  const pct = target > 0 ? (avg / target) * 100 : 0;
+  if (pct >= 80) return { cls: "positive", label: "مستوى جيد" };
+  if (pct >= 60) return { cls: "mid", label: "يحتاج تحسين" };
+  return { cls: "negative", label: "يحتاج متابعة عاجلة" };
+}
 
 async function initParent() {
   const params = new URLSearchParams(window.location.search);
   const token = params.get("token");
   const contentEl = document.getElementById("parentContent");
   if (!token) { contentEl.innerHTML = `<div class="section-card"><div class="empty-state">رابط غير صالح.</div></div>`; return; }
-
   const { data, error } = await supabaseClient.rpc("get_student_public_report", { p_token: token });
-  if (error || !data) { contentEl.innerHTML = `<div class="section-card"><div class="empty-state">⛔ هذا الرمز غير صالح.</div></div>`; return; }
-
+  if (error || !data) { contentEl.innerHTML = `<div class="section-card"><div class="empty-state">هذا الرمز غير صالح.</div></div>`; return; }
   PDATA = data;
   renderParentReport();
 }
@@ -48,22 +52,15 @@ function computeResults(period) {
 function renderParentReport() {
   const contentEl = document.getElementById("parentContent");
   const student = PDATA.student;
-
   contentEl.innerHTML = `
     <div class="section-card" style="margin-bottom:18px;">
-      <div style="display:flex; align-items:center; gap:16px;">
-        <div class="folder-avatar" style="--folder-color:var(--accent-cyan); width:56px; height:56px; font-size:22px;">${(student.full_name || "?").charAt(0)}</div>
-        <div><div style="font-family:var(--font-display); font-weight:800; font-size:19px;">${escapeHtmlP(student.full_name)}</div><div style="color:var(--text-muted); font-size:13px;">${student.class_title ? escapeHtmlP(student.class_title) : ""}</div></div>
-      </div>
+      <div style="font-family:var(--font-display); font-weight:800; font-size:19px;">${escapeHtmlP(student.full_name)}</div>
+      <div style="color:var(--text-muted); font-size:13px;">${student.class_title ? escapeHtmlP(student.class_title) : ""}</div>
     </div>
     <div class="period-toggle" id="pPeriodToggle"><button data-p="p1" class="active">الفترة الأولى</button><button data-p="p2">الفترة الثانية</button></div>
     <div id="pReportBody"></div>
-    <div class="section-card" style="margin-top:20px;">
-      <div class="section-head"><h3>📌 ملاحظات السلوك</h3></div>
-      <div id="pBehaviorList"></div>
-    </div>
+    <div class="section-card" style="margin-top:20px;"><div class="section-head"><h3>ملاحظات السلوك</h3></div><div id="pBehaviorList"></div></div>
   `;
-
   document.querySelectorAll("#pPeriodToggle button").forEach((btn) => {
     btn.addEventListener("click", () => {
       pPeriod = btn.dataset.p;
@@ -72,16 +69,8 @@ function renderParentReport() {
       fillReportBody();
     });
   });
-
   fillReportBody();
   fillBehaviorNotes();
-}
-
-function classifyLevelP(avg, target) {
-  const pct = target > 0 ? (avg / target) * 100 : 0;
-  if (pct >= 80) return { emoji: "🟢", label: "مستوى جيد" };
-  if (pct >= 60) return { emoji: "🟡", label: "يحتاج تحسين" };
-  return { emoji: "🔴", label: "يحتاج متابعة عاجلة" };
 }
 
 function fillReportBody() {
@@ -95,10 +84,7 @@ function fillReportBody() {
       <div class="stat-card"><div class="num">${examsTotal}</div><div class="lbl">مجموع الاختبارات من 60</div></div>
       <div class="stat-card"><div class="num">${r.attendanceRate !== null ? r.attendanceRate + "%" : "—"}</div><div class="lbl">نسبة الحضور (${r.presentCount}/${r.totalSessions})</div></div>
     </div>
-    <div class="component-ring-grid">${r.results.map((c) => {
-      const lvl = classifyLevelP(c.avg, c.target);
-      return `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div><div style="font-size:11px; margin-top:6px; font-weight:700;">${lvl.emoji} ${lvl.label}</div></div>`;
-    }).join("")}</div>
+    <div class="component-ring-grid">${r.results.map((c) => { const lvl = classifyLevelP(c.avg, c.target); return `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div><div style="font-size:11px; margin-top:6px; font-weight:700;" class="lvl-${lvl.cls}">${lvl.label}</div></div>`; }).join("")}</div>
   `;
 }
 
@@ -106,10 +92,7 @@ function fillBehaviorNotes() {
   const notes = (PDATA.behavior_notes || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const holder = document.getElementById("pBehaviorList");
   if (notes.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه ملاحظات</div>`; return; }
-  holder.innerHTML = notes.map((n) => `
-    <div class="behavior-note ${n.note_type}">
-      <div><div class="txt">${n.note_type === "positive" ? "🟢" : "🔴"} ${escapeHtmlP(n.note)}</div><div class="date">${new Date(n.created_at).toLocaleDateString("ar-SA")}</div></div>
-    </div>`).join("");
+  holder.innerHTML = notes.map((n) => `<div class="behavior-note ${n.note_type}"><div><div class="txt"><span class="dot-badge ${n.note_type}"></span> ${escapeHtmlP(n.note)}</div><div class="date">${new Date(n.created_at).toLocaleDateString("ar-SA")}</div></div></div>`).join("");
 }
 
 initParent();

@@ -8,13 +8,13 @@ async function renderShareLinksSection() {
   const contentArea = document.getElementById("contentArea");
   contentArea.innerHTML = `
     <div class="section-card" style="margin-bottom:20px;">
-      <div class="section-head"><h3>توليد رابط جديد للعرض فقط</h3></div>
+      <div class="section-head"><h3>${icon("link")} توليد رابط جديد للعرض فقط</h3></div>
       <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px; line-height:1.8;">الرابط يعطي أي شخص عرض كل بيانات الموقع بدون تسجيل دخول وبدون إمكانية تعديل. تقدر تنهي أي رابط بأي وقت.</p>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
         <select id="durationSelect" style="background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:10px; padding:12px 14px; color:var(--text-primary); font-family:var(--font-body);">
           ${DURATION_OPTIONS.map((d, i) => `<option value="${d.hours}" ${i === 2 ? "selected" : ""}>${d.label}</option>`).join("")}
         </select>
-        <button class="btn-add" id="generateLinkBtn">🔗 توليد رابط جديد</button>
+        <button class="btn-add" id="generateLinkBtn">${icon("link", 14)} توليد رابط جديد</button>
       </div>
       <div id="newLinkResult" style="margin-top:16px;"></div>
     </div>
@@ -30,11 +30,11 @@ async function generateShareLink() {
   const token = crypto.randomUUID().replace(/-/g, "");
   const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
   const { error } = await supabaseClient.from("share_links").insert({ token, expires_at: expiresAt });
-  btn.disabled = false; btn.textContent = "🔗 توليد رابط جديد";
+  btn.disabled = false; btn.innerHTML = icon("link", 14) + " توليد رابط جديد";
   if (error) { alert("تعذر توليد الرابط: " + error.message); return; }
   const baseUrl = window.location.href.replace(/dashboard\.html.*$/, "");
   const fullLink = baseUrl + "view.html?token=" + token;
-  document.getElementById("newLinkResult").innerHTML = `<div class="item-row"><div class="info"><div class="t">✅ تم توليد الرابط</div><div class="d" style="word-break:break-all;">${fullLink}</div></div><div class="actions"><button class="icon-btn" onclick="navigator.clipboard.writeText('${fullLink}'); this.textContent='✓'; setTimeout(()=>this.textContent='📋',1500);" title="نسخ">📋</button></div></div>`;
+  document.getElementById("newLinkResult").innerHTML = `<div class="item-row"><div class="info"><div class="t">تم توليد الرابط</div><div class="d" style="word-break:break-all;">${fullLink}</div></div><div class="actions"><button class="icon-btn" onclick="navigator.clipboard.writeText('${fullLink}'); this.innerHTML='${icon("check", 15)}';" title="نسخ">${icon("copy", 15)}</button></div></div>`;
   await loadShareLinks();
 }
 
@@ -48,12 +48,14 @@ async function loadShareLinks() {
     const expires = new Date(link.expires_at);
     const isExpired = expires < now;
     const isRevoked = link.revoked;
-    let statusLabel = "🟢 نشط";
-    if (isRevoked) statusLabel = "⛔ منتهي (أُلغي يدوياً)";
-    else if (isExpired) statusLabel = "⏱️ منتهي الصلاحية";
+    let statusLabel = "نشط", statusIcon = "check";
+    if (isRevoked) { statusLabel = "منتهي (أُلغي يدوياً)"; statusIcon = "ban"; }
+    else if (isExpired) { statusLabel = "منتهي الصلاحية"; statusIcon = "clock"; }
     const baseUrl = window.location.href.replace(/dashboard\.html.*$/, "");
     const fullLink = baseUrl + "view.html?token=" + link.token;
-    return `<div class="item-row"><div class="info"><div class="t">${statusLabel}</div><div class="d">ينتهي: ${expires.toLocaleString("ar-SA")}</div></div><div class="actions">${!isRevoked && !isExpired ? `<button class="icon-btn" onclick="navigator.clipboard.writeText('${fullLink}'); this.textContent='✓'; setTimeout(()=>this.textContent='📋',1500);" title="نسخ الرابط">📋</button><button class="icon-btn danger" onclick="revokeShareLink('${link.id}')" title="إنهاء الآن">⛔</button>` : `<button class="icon-btn danger" onclick="deleteShareLink('${link.id}')" title="حذف من القائمة">🗑</button>`}</div></div>`;
+    return `
+      <div class="item-row"><div class="info"><div class="t" style="display:flex; align-items:center; gap:8px;">${icon(statusIcon, 15)} ${statusLabel}</div><div class="d">ينتهي: ${expires.toLocaleString("ar-SA")}</div></div>
+      <div class="actions">${!isRevoked && !isExpired ? `<button class="icon-btn" onclick="navigator.clipboard.writeText('${fullLink}'); this.innerHTML='${icon("check", 15)}';" title="نسخ الرابط">${icon("copy", 15)}</button><button class="icon-btn danger" onclick="revokeShareLink('${link.id}')" title="إنهاء الآن">${icon("ban", 15)}</button>` : `<button class="icon-btn danger" onclick="deleteShareLink('${link.id}')" title="حذف من القائمة">${icon("trash", 15)}</button>`}</div></div>`;
   }).join("");
 }
 

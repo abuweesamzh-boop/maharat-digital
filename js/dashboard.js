@@ -1,6 +1,13 @@
 const roleLabels = { teacher: "المعلم", student: "الطالب", supervisor: "المشرف" };
 let currentProfile = null;
 
+function hydrateIcons(root) {
+  (root || document).querySelectorAll("[data-icon]").forEach((el) => {
+    const name = el.dataset.icon;
+    if (ICONS[name]) el.innerHTML = ICONS[name];
+  });
+}
+
 async function guardAndLoad() {
   const { data: sessionData } = await supabaseClient.auth.getSession();
   if (!sessionData.session) { window.location.href = "index.html"; return; }
@@ -9,6 +16,7 @@ async function guardAndLoad() {
   if (error || !profile) { await supabaseClient.auth.signOut(); window.location.href = "index.html"; return; }
   currentProfile = profile;
   renderUserInfo(profile); renderNavByRole(profile.role); loadHomeStats();
+  hydrateIcons(document);
 }
 function renderUserInfo(profile) {
   document.getElementById("userName").textContent = profile.full_name;
@@ -26,7 +34,7 @@ async function loadHomeStats() {
       <div class="stat-card"><div class="num">–</div><div class="lbl">الفصول الدراسية</div></div>
       <div class="stat-card"><div class="num">–</div><div class="lbl">روابط الصفوف</div></div>
     </div>
-    <div class="section-card"><div class="section-head"><h3>مرحباً، ${currentProfile.full_name} 👋</h3></div><p style="color:var(--text-muted); font-size:14px; line-height:1.9;">استخدم القائمة الجانبية للتنقل بين الأقسام.</p></div>`;
+    <div class="section-card"><div class="section-head"><h3>مرحباً، ${currentProfile.full_name}</h3></div><p style="color:var(--text-muted); font-size:14px; line-height:1.9;">استخدم القائمة الجانبية للتنقل بين الأقسام.</p></div>`;
   if (currentProfile.role === "teacher") {
     const [portfolio, students, classes, extLinks] = await Promise.all([
       supabaseClient.from("content_items").select("id, content_sections!inner(module)", { count: "exact", head: true }).eq("content_sections.module", "portfolio"),

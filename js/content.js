@@ -1,11 +1,10 @@
 const BUCKET_NAME = "maharat-files";
-const FOLDER_COLORS = ["#2DD8C8", "#F5A623", "#B892FF", "#FF7A8A", "#5FD068", "#5FA8FF", "#FFB74D", "#E879C6"];
+const FOLDER_COLORS = ["#0F2542", "#B8862E", "#3C6E5A", "#7A4B8A", "#1F6F8B", "#8A4B3C", "#4B6B8A", "#6B4B8A"];
 let currentModule = null;
 let navStack = [];
-const MODULE_LABELS = { portfolio: { page: "ملف إنجاز المعلم" } };
+const MODULE_LABELS = { portfolio: { page: "ملف إنجاز المعلم", icon: "folder" } };
 function renderPortfolioSection() { renderModule("portfolio"); }
 function colorFor(i) { return FOLDER_COLORS[i % FOLDER_COLORS.length]; }
-function initials(t) { return (t || "?").trim().charAt(0); }
 function escapeHtml(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
 function escapeAttr(str) { return (str || "").replace(/'/g, "&#39;"); }
 function currentParentId() { return navStack.length ? navStack[navStack.length - 1].id : null; }
@@ -31,15 +30,15 @@ async function renderFolderView() {
     </div>`;
 
   contentArea.innerHTML = `
-    ${parentId ? `<button class="btn-back no-print" onclick="${navStack.length > 1 ? `goToCrumb(${navStack.length - 2})` : "goToModuleRoot()"}">← رجوع</button>` : ""}
+    ${parentId ? `<button class="btn-back no-print" onclick="${navStack.length > 1 ? `goToCrumb(${navStack.length - 2})` : "goToModuleRoot()"}">${icon("back", 15)} رجوع</button>` : ""}
     ${breadcrumbHtml}
-    ${!parentId ? `<div class="section-card" style="margin-bottom:18px;"><div class="section-head"><h3>📊 لوحة إحصائيات المرفقات</h3></div><div id="dashboardStatsHolder" class="stat-grid"><div class="empty-state">جاري الحساب...</div></div></div>` : ""}
+    ${!parentId ? `<div class="section-card" style="margin-bottom:18px;"><div class="section-head"><h3>${icon("chart")} لوحة إحصائيات المرفقات</h3></div><div id="dashboardStatsHolder" class="stat-grid"><div class="empty-state">جاري الحساب...</div></div></div>` : ""}
     <div class="section-card" style="margin-bottom:18px;">
       <div class="section-head">
         <h3>الأقسام الفرعية</h3>
         <div style="display:flex; gap:10px;">
-          <button class="btn-add" id="addFolderBtn">+ إضافة قسم</button>
-          ${parentId ? `<button class="btn-add" id="addItemHereBtn" style="background:var(--accent-cyan); color:#06231F;">+ إضافة مرفق هنا</button>` : ""}
+          <button class="btn-add" id="addFolderBtn">${icon("plus", 14)} إضافة قسم</button>
+          ${parentId ? `<button class="btn-add" id="addItemHereBtn">${icon("upload", 14)} إضافة مرفق هنا</button>` : ""}
         </div>
       </div>
       <div id="foldersHolder"><div class="empty-state">جاري التحميل...</div></div>
@@ -95,7 +94,15 @@ async function loadSubFolders(parentId) {
   ));
   holder.innerHTML = `<div class="folder-grid">` + sections.map((s, i) => {
     const [subCount, itemCount] = counts[i];
-    return `<div class="folder-card" style="--folder-color:${colorFor(s.color_index ?? i)}" onclick="enterFolder('${s.id}', '${escapeAttr(s.title)}')"><button class="folder-delete" onclick="event.stopPropagation(); deleteFolder('${s.id}')" title="حذف">✕</button><div class="folder-avatar">${initials(s.title)}</div><div class="folder-title">${escapeHtml(s.title)}</div><div class="folder-meta">${subCount.count ?? 0} قسم فرعي · ${itemCount.count ?? 0} مرفق</div></div>`;
+    return `
+    <div class="folder-card" style="--folder-color:${colorFor(s.color_index ?? i)}" onclick="enterFolder('${s.id}', '${escapeAttr(s.title)}')">
+      <div class="folder-actions-row">
+        <button class="folder-mini-btn" onclick="event.stopPropagation(); openEditSectionModal('${s.id}', '${escapeAttr(s.title)}', ${s.color_index ?? i})" title="تعديل">${icon("edit", 14)}</button>
+        <button class="folder-mini-btn danger" onclick="event.stopPropagation(); deleteFolder('${s.id}')" title="حذف">${icon("trash", 14)}</button>
+      </div>
+      <div class="folder-title">${escapeHtml(s.title)}</div>
+      <div class="folder-meta">${subCount.count ?? 0} قسم فرعي · ${itemCount.count ?? 0} مرفق</div>
+    </div>`;
   }).join("") + `</div>`;
 }
 
@@ -109,7 +116,11 @@ async function loadItems(sectionId) {
   holder.innerHTML = data.map((item) => `
     <div class="item-row">
       <div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div></div>
-      <div class="actions">${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">👁</a>` : ""}<button class="icon-btn danger" onclick="deleteItem('${item.id}')" title="حذف">✕</button></div>
+      <div class="actions">
+        ${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">${icon("eye", 15)}</a>` : ""}
+        <button class="icon-btn" onclick="openMoveItemModal('${item.id}', '${sectionId}')" title="نقل لقسم آخر">${icon("move", 15)}</button>
+        <button class="icon-btn danger" onclick="deleteItem('${item.id}')" title="حذف">${icon("trash", 15)}</button>
+      </div>
     </div>`).join("");
 }
 
@@ -140,6 +151,34 @@ function openSectionModal(parentId) {
   document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
 }
 
+// ============ تعديل القسم (إعادة تسمية + تغيير لون) ============
+
+function openEditSectionModal(sectionId, currentTitle, currentColorIndex) {
+  document.getElementById("modalTitle").textContent = "تعديل القسم";
+  document.getElementById("modalFields").innerHTML = `
+    <div class="field"><label>اسم القسم</label><input type="text" id="es_title" value="${escapeAttr(currentTitle)}" required /></div>
+    <div class="field"><label>اللون</label><div class="color-swatch-row">${FOLDER_COLORS.map((c, i) => `<div class="color-swatch ${i === (currentColorIndex ?? 0) ? "selected" : ""}" data-index="${i}" style="background:${c}"></div>`).join("")}</div></div>`;
+  let selectedColor = currentColorIndex ?? 0;
+  setTimeout(() => {
+    document.querySelectorAll(".color-swatch").forEach((sw) => {
+      sw.addEventListener("click", () => { document.querySelectorAll(".color-swatch").forEach((x) => x.classList.remove("selected")); sw.classList.add("selected"); selectedColor = parseInt(sw.dataset.index, 10); });
+    });
+  }, 0);
+  document.getElementById("modalOverlay").classList.add("show");
+  document.getElementById("modalForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const submitBtn = document.getElementById("modalSubmit");
+    submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
+    const title = document.getElementById("es_title").value.trim();
+    const { error } = await supabaseClient.from("content_sections").update({ title, color_index: selectedColor }).eq("id", sectionId);
+    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
+    if (error) { alert("تعذر التعديل: " + error.message); return; }
+    document.getElementById("modalOverlay").classList.remove("show");
+    await loadSubFolders(currentParentId());
+  };
+  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
+}
+
 async function deleteFolder(id) {
   if (!confirm("متأكد تبي تحذف هذا القسم؟ سيتم حذف كل الأقسام الفرعية والمرفقات بداخله.")) return;
   const { error } = await supabaseClient.from("content_sections").delete().eq("id", id);
@@ -148,13 +187,52 @@ async function deleteFolder(id) {
   if (!currentParentId()) await loadDashboardStats();
 }
 
+// ============ نقل مرفق لقسم آخر ============
+
+async function openMoveItemModal(itemId, currentSectionId) {
+  document.getElementById("modalTitle").textContent = "نقل المرفق لقسم آخر";
+  document.getElementById("modalFields").innerHTML = `<div class="field"><label>القسم الوجهة</label><select id="mv_target" style="width:100%; background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:10px; padding:13px 14px; color:var(--text-primary); font-family:var(--font-body);"><option>جاري التحميل...</option></select></div>`;
+  document.getElementById("modalOverlay").classList.add("show");
+
+  const { data: allSections } = await supabaseClient.from("content_sections").select("*").eq("module", currentModule).order("created_at");
+  const byParent = {};
+  (allSections || []).forEach((s) => { const p = s.parent_id || "root"; if (!byParent[p]) byParent[p] = []; byParent[p].push(s); });
+
+  const options = [];
+  function walk(parentKey, depth) {
+    (byParent[parentKey] || []).forEach((s) => {
+      if (s.id !== currentSectionId) options.push({ id: s.id, label: "— ".repeat(depth) + s.title });
+      walk(s.id, depth + 1);
+    });
+  }
+  walk("root", 0);
+
+  const sel = document.getElementById("mv_target");
+  if (options.length === 0) { sel.innerHTML = `<option value="">ما فيه أقسام ثانية متاحة</option>`; }
+  else sel.innerHTML = options.map((o) => `<option value="${o.id}">${escapeHtml(o.label)}</option>`).join("");
+
+  document.getElementById("modalForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const targetId = document.getElementById("mv_target").value;
+    if (!targetId) { alert("اختر قسم"); return; }
+    const submitBtn = document.getElementById("modalSubmit");
+    submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
+    const { error } = await supabaseClient.from("content_items").update({ section_id: targetId }).eq("id", itemId);
+    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
+    if (error) { alert("تعذر النقل: " + error.message); return; }
+    document.getElementById("modalOverlay").classList.remove("show");
+    await loadItems(currentSectionId);
+  };
+  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
+}
+
 function openAddItemModal(sectionId, sectionTitle) {
   document.getElementById("modalTitle").textContent = "إضافة مرفق إلى: " + sectionTitle;
   document.getElementById("modalFields").innerHTML = `
     <div class="field"><label>العنوان</label><input type="text" id="f_title" required /></div>
     <div class="field"><label>الوصف (اختياري)</label><input type="text" id="f_description" /></div>
     <div class="field"><label>الملف (أي صيغة)</label><input type="file" id="f_file" /></div>
-    <div class="field"><label>📷 أو التقط صورة مباشرة بالكاميرا</label><input type="file" id="f_camera" accept="image/*" capture="environment" /></div>
+    <div class="field"><label>التقط صورة مباشرة بالكاميرا</label><input type="file" id="f_camera" accept="image/*" capture="environment" /></div>
   `;
   document.getElementById("modalOverlay").classList.add("show");
   document.getElementById("modalForm").onsubmit = async (e) => { e.preventDefault(); await submitItem(sectionId); };
