@@ -60,6 +60,7 @@ document.querySelectorAll(".nav-link").forEach((link) => {
     else if (section === "classes") renderClassesSection();
     else if (section === "sharelinks") renderShareLinksSection();
     else if (section === "externallinks") renderExternalLinksSection();
+    else if (section === "cv") renderCVSection();
     document.getElementById("sidebar").classList.remove("open");
   });
 });
