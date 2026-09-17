@@ -85,7 +85,7 @@ async function loadGradingKinds() {
           <div class="session-pill" onclick="openSessionGrid('${s.id}', '${kind}', ${s.session_number})">
             <div class="del" onclick="event.stopPropagation(); deleteSession('${s.id}')">${icon("close", 11)}</div>
             <div class="num">${kind === "continuous" ? "حصة " + s.session_number : "اختبار " + s.session_number}</div>
-            <div class="lbl">اضغط للتعديل</div>
+            <div class="lbl">${s.session_date ? new Date(s.session_date).toLocaleDateString("ar-SA") : "اضغط للتعديل"}</div>
           </div>`).join("") + `</div>`}
       </div>`;
   }
@@ -96,7 +96,7 @@ async function loadGradingKinds() {
 async function createSession(kind) {
   const { data: existing } = await supabaseClient.from("class_sessions").select("session_number").eq("class_id", gradingClassId).eq("period", gradingPeriod).eq("session_kind", kind).order("session_number", { ascending: false }).limit(1);
   const nextNumber = existing && existing.length > 0 ? existing[0].session_number + 1 : 1;
-  const { data: newSession, error } = await supabaseClient.from("class_sessions").insert({ class_id: gradingClassId, period: gradingPeriod, session_kind: kind, session_number: nextNumber }).select().single();
+  const { data: newSession, error } = await supabaseClient.from("class_sessions").insert({ class_id: gradingClassId, period: gradingPeriod, session_kind: kind, session_number: nextNumber, session_date: new Date().toISOString().slice(0, 10) }).select().single();
   if (error) { alert("تعذر إنشاء السجل: " + error.message); return; }
   openSessionGrid(newSession.id, kind, nextNumber);
 }
@@ -126,15 +126,21 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
   const { data: scores } = await supabaseClient.from("session_scores").select("*").eq("session_id", sessionId);
   const scoreMap = {};
   (scores || []).forEach((s) => (scoreMap[s.student_id] = s));
+  const { data: sessionRow } = await supabaseClient.from("class_sessions").select("session_date").eq("id", sessionId).single();
+  const currentDate = sessionRow && sessionRow.session_date ? sessionRow.session_date : new Date().toISOString().slice(0, 10);
   document.getElementById("pageTitle").textContent = `${SESSION_KIND_LABELS[kind]} — ${isContinuous ? "حصة" : "اختبار"} ${sessionNumber}`;
   contentArea.innerHTML = `
     <button class="btn-back no-print" onclick="openClass('${gradingClassId}', '${escapeAttr(gradingClassTitle)}')">${icon("back", 15)} رجوع للفصل</button>
+    <div class="field" style="max-width:220px;"><label>تاريخ ${isContinuous ? "الحصة" : "الاختبار"}</label><input type="date" id="sessionDateInput" value="${currentDate}" /></div>
     ${isContinuous ? `<div class="column-picker" id="columnPicker">${CONTINUOUS_COLS.map((c) => `<label><input type="checkbox" class="col-check" value="${c.field}" checked /> ${c.label}</label>`).join("")}</div>` : ""}
     <div class="section-card">
       <div class="section-head"><h3>إدخال الدرجات — ${students.length} طالب</h3><button class="btn-add" id="saveGridBtn">${icon("check", 14)} حفظ الكل</button></div>
       <p style="color:var(--text-muted); font-size:12px; margin-bottom:14px;">القيمة الافتراضية 10 لكل خانة — بس اضغط على الرقم المناسب للطالب لو يستحق أقل.</p>
       <div class="grade-table-wrap"><table class="grade-table" id="gradeTable"><thead><tr id="gradeTableHead"></tr></thead><tbody id="gradeTableBody"></tbody></table></div>
     </div>`;
+  document.getElementById("sessionDateInput").addEventListener("change", async (e) => {
+    await supabaseClient.from("class_sessions").update({ session_date: e.target.value }).eq("id", sessionId);
+  });
   hydrateIcons(contentArea);
 
   function renderTableRows() {
@@ -487,8 +493,8 @@ async function renderClassReport(classId, classTitle) {
     </div>
     <div class="section-card">
       <div class="grade-table-wrap"><table class="grade-table class-report-table" id="classReportTable">
-        <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>المجموع (40)</th><th>تحريري</th><th>عملي</th><th>المجموع (60)</th><th>الإجمالي</th><th>الحضور</th></tr></thead>
-        <tbody id="classReportBody"><tr><td colspan="11" class="empty-state">جاري التحميل...</td></tr></tbody>
+        <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>المجموع (40)</th><th>تحريري</th><th>عملي</th><th>المجموع (60)</th><th>الإجمالي</th></tr></thead>
+        <tbody id="classReportBody"><tr><td colspan="10" class="empty-state">جاري التحميل...</td></tr></tbody>
       </table></div>
     </div>`;
   hydrateIcons(contentArea);
@@ -506,13 +512,12 @@ async function renderClassReport(classId, classTitle) {
 
 async function loadClassReportBody(classId, period, classTitle) {
   const body = document.getElementById("classReportBody");
-  body.innerHTML = `<tr><td colspan="11" class="empty-state">جاري التحميل...</td></tr>`;
+  body.innerHTML = `<tr><td colspan="10" class="empty-state">جاري التحميل...</td></tr>`;
   const { data: students } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
-  if (!students || students.length === 0) { body.innerHTML = `<tr><td colspan="11" class="empty-state">ما فيه طلاب بهذا الفصل</td></tr>`; return; }
+  if (!students || students.length === 0) { body.innerHTML = `<tr><td colspan="10" class="empty-state">ما فيه طلاب بهذا الفصل</td></tr>`; return; }
   const rowsData = await Promise.all(students.map(async (st) => {
     const r = await fetchStudentResults(st.id, period);
-    const attendanceStr = r.attendanceRate !== null ? r.attendanceRate + "%" : "—";
-    return { student: st, results: r.results, total: r.total, attendanceStr };
+    return { student: st, results: r.results, total: r.total };
   }));
   classReportCache = { classId, period, classTitle, rowsData };
   body.innerHTML = rowsData.map((r) => {
@@ -524,17 +529,17 @@ async function loadClassReportBody(classId, period, classTitle) {
       <td style="font-weight:700;">${continuousTotal}</td>
       <td>${r.results[4].avg}</td><td>${r.results[5].avg}</td>
       <td style="font-weight:700;">${examsTotal}</td>
-      <td style="font-weight:700; color:var(--navy);">${r.total}</td><td>${r.attendanceStr}</td>
+      <td style="font-weight:700; color:var(--navy);">${r.total}</td>
     </tr>`;
   }).join("");
 }
 
 function exportClassReportExcel(classTitle) {
   if (!classReportCache) return;
-  const headers = ["الطالب", "المشاركة", "الواجبات", "المهام الأدائية", "التطبيق العملي", "المجموع (40)", "التحريري", "العملي", "المجموع (60)", "الإجمالي", "الحضور"];
+  const headers = ["الطالب", "المشاركة", "الواجبات", "المهام الأدائية", "التطبيق العملي", "المجموع (40)", "التحريري", "العملي", "المجموع (60)", "الإجمالي"];
   const rows = classReportCache.rowsData.map((r) => {
     const { continuousTotal, examsTotal } = calcSubtotals(r.results);
-    return [r.student.full_name, r.results[0].avg, r.results[1].avg, r.results[2].avg, r.results[3].avg, continuousTotal, r.results[4].avg, r.results[5].avg, examsTotal, r.total, r.attendanceStr];
+    return [r.student.full_name, r.results[0].avg, r.results[1].avg, r.results[2].avg, r.results[3].avg, continuousTotal, r.results[4].avg, r.results[5].avg, examsTotal, r.total];
   });
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   const wb = XLSX.utils.book_new();
@@ -548,13 +553,13 @@ function printClassReportTable(classTitle) {
   const win = window.open("", "_blank");
   const rowsHtml = classReportCache.rowsData.map((r) => {
     const { continuousTotal, examsTotal } = calcSubtotals(r.results);
-    return `<tr><td style="text-align:right; font-weight:600;">${escapeHtml(r.student.full_name)}</td><td>${r.results[0].avg}</td><td>${r.results[1].avg}</td><td>${r.results[2].avg}</td><td>${r.results[3].avg}</td><td style="font-weight:700; background:#f5f5f5;">${continuousTotal}</td><td>${r.results[4].avg}</td><td>${r.results[5].avg}</td><td style="font-weight:700; background:#f5f5f5;">${examsTotal}</td><td style="font-weight:800;">${r.total}</td><td>${r.attendanceStr}</td></tr>`;
+    return `<tr><td style="text-align:right; font-weight:600;">${escapeHtml(r.student.full_name)}</td><td>${r.results[0].avg}</td><td>${r.results[1].avg}</td><td>${r.results[2].avg}</td><td>${r.results[3].avg}</td><td style="font-weight:700; background:#f5f5f5;">${continuousTotal}</td><td>${r.results[4].avg}</td><td>${r.results[5].avg}</td><td style="font-weight:700; background:#f5f5f5;">${examsTotal}</td><td style="font-weight:800;">${r.total}</td></tr>`;
   }).join("");
   win.document.write(`
     <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقرير الرصد ${escapeHtml(classTitle)}</title>
     <style>@page { size: landscape; margin: 10mm; } body { font-family: Tajawal, Arial, sans-serif; direction: rtl; margin: 0; padding: 20px; } h2 { margin-bottom: 4px; } p { color: #555; margin-bottom: 16px; } table { width: 100%; border-collapse: collapse; font-size: 11px; } th, td { border: 1px solid #999; padding: 6px 8px; text-align: center; } thead th { background: #eee; }</style>
     </head><body><h2>تقرير الرصد: ${escapeHtml(classTitle)}</h2><p>${periodLabel}</p>
-    <table><thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>المجموع (40)</th><th>تحريري</th><th>عملي</th><th>المجموع (60)</th><th>الإجمالي</th><th>الحضور</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+    <table><thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>المجموع (40)</th><th>تحريري</th><th>عملي</th><th>المجموع (60)</th><th>الإجمالي</th></tr></thead><tbody>${rowsHtml}</tbody></table>
     </body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 400);
@@ -570,10 +575,9 @@ async function printAllStudentReports(classId, classTitle) {
       <h2 style="margin-bottom:4px;">${escapeHtml(r.student.full_name)}</h2>
       <p style="color:#555; margin-bottom:20px;">${escapeHtml(classTitle)} — ${periodLabel}</p>
       <table style="width:100%; border-collapse: collapse; margin-bottom:20px;">
-        <thead><tr style="background:#eee;">${r.results.slice(0, 4).map((c) => `<th style="border:1px solid #ccc; padding:8px;">${c.label}</th>`).join("")}<th style="border:1px solid #ccc; padding:8px;">المجموع (40)</th>${r.results.slice(4).map((c) => `<th style="border:1px solid #ccc; padding:8px;">${c.label}</th>`).join("")}<th style="border:1px solid #ccc; padding:8px;">المجموع (60)</th><th style="border:1px solid #ccc; padding:8px;">الإجمالي</th><th style="border:1px solid #ccc; padding:8px;">الحضور</th></tr></thead>
-        <tbody><tr>${r.results.slice(0, 4).map((c) => `<td style="border:1px solid #ccc; padding:8px; text-align:center;">${c.avg}</td>`).join("")}<td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${continuousTotal}</td>${r.results.slice(4).map((c) => `<td style="border:1px solid #ccc; padding:8px; text-align:center;">${c.avg}</td>`).join("")}<td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${examsTotal}</td><td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${r.total} / 100</td><td style="border:1px solid #ccc; padding:8px; text-align:center;">${r.attendanceStr}</td></tr></tbody>
+        <thead><tr style="background:#eee;">${r.results.slice(0, 4).map((c) => `<th style="border:1px solid #ccc; padding:8px;">${c.label}</th>`).join("")}<th style="border:1px solid #ccc; padding:8px;">المجموع (40)</th>${r.results.slice(4).map((c) => `<th style="border:1px solid #ccc; padding:8px;">${c.label}</th>`).join("")}<th style="border:1px solid #ccc; padding:8px;">المجموع (60)</th><th style="border:1px solid #ccc; padding:8px;">الإجمالي</th></tr></thead>
+        <tbody><tr>${r.results.slice(0, 4).map((c) => `<td style="border:1px solid #ccc; padding:8px; text-align:center;">${c.avg}</td>`).join("")}<td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${continuousTotal}</td>${r.results.slice(4).map((c) => `<td style="border:1px solid #ccc; padding:8px; text-align:center;">${c.avg}</td>`).join("")}<td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${examsTotal}</td><td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${r.total} / 100</td></tr></tbody>
       </table>
-      <p>ملاحظات إيجابية: ${r.posCount} · ملاحظات سلبية: ${r.negCount}</p>
     </div>`;
   }).join("");
   const win = window.open("", "_blank");
@@ -599,8 +603,8 @@ async function renderTeacherSpecialReport(classId, classTitle) {
     <p style="color:var(--text-muted); font-size:12px; margin-bottom:14px;">مستوى جيد (80%+) · يحتاج تحسين (60-79%) · يحتاج متابعة عاجلة (أقل من 60%)</p>
     <div class="section-card">
       <div class="grade-table-wrap"><table class="grade-table class-report-table" id="teacherReportTable">
-        <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>تحريري</th><th>عملي</th><th>الإجمالي</th><th>إيجابية</th><th>سلبية</th></tr></thead>
-        <tbody id="teacherReportBody"><tr><td colspan="10" class="empty-state">جاري التحميل...</td></tr></tbody>
+        <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>تحريري</th><th>عملي</th><th>الإجمالي</th><th>عدد الغياب</th><th>إيجابية</th><th>سلبية</th></tr></thead>
+        <tbody id="teacherReportBody"><tr><td colspan="11" class="empty-state">جاري التحميل...</td></tr></tbody>
       </table></div>
     </div>`;
   hydrateIcons(contentArea);
@@ -623,16 +627,17 @@ function levelCellHtml(c) {
 
 async function loadTeacherReportBody(classId, period, classTitle) {
   const body = document.getElementById("teacherReportBody");
-  body.innerHTML = `<tr><td colspan="10" class="empty-state">جاري التحميل...</td></tr>`;
+  body.innerHTML = `<tr><td colspan="11" class="empty-state">جاري التحميل...</td></tr>`;
   const { data: students } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
-  if (!students || students.length === 0) { body.innerHTML = `<tr><td colspan="10" class="empty-state">ما فيه طلاب بهذا الفصل</td></tr>`; return; }
+  if (!students || students.length === 0) { body.innerHTML = `<tr><td colspan="11" class="empty-state">ما فيه طلاب بهذا الفصل</td></tr>`; return; }
   const { data: allNotes } = await supabaseClient.from("behavior_notes").select("*").in("student_id", students.map((s) => s.id));
   const rowsData = await Promise.all(students.map(async (st) => {
     const r = await fetchStudentResults(st.id, period);
     const myNotes = (allNotes || []).filter((n) => n.student_id === st.id);
     const posCount = myNotes.filter((n) => n.note_type === "positive").length;
     const negCount = myNotes.filter((n) => n.note_type === "negative").length;
-    return { student: st, results: r.results, total: r.total, posCount, negCount };
+    const absenceCount = r.totalSessions - r.presentCount;
+    return { student: st, results: r.results, total: r.total, posCount, negCount, absenceCount };
   }));
   teacherReportCache = { classId, period, classTitle, rowsData };
   body.innerHTML = rowsData.map((r) => `
@@ -640,17 +645,18 @@ async function loadTeacherReportBody(classId, period, classTitle) {
       <td class="student-name-cell">${escapeHtml(r.student.full_name)}</td>
       ${r.results.map((c) => levelCellHtml(c)).join("")}
       <td style="font-weight:800; color:var(--navy);">${r.total}</td>
+      <td style="${r.absenceCount > 0 ? "color:var(--danger); font-weight:700;" : ""}">${r.absenceCount}</td>
       <td>${r.posCount}</td><td>${r.negCount}</td>
     </tr>`).join("");
 }
 
 function exportTeacherReportExcel(classTitle) {
   if (!teacherReportCache) return;
-  const headers = ["الطالب", "المشاركة", "تصنيف", "الواجبات", "تصنيف", "المهام الأدائية", "تصنيف", "التطبيق العملي", "تصنيف", "التحريري", "تصنيف", "العملي", "تصنيف", "الإجمالي", "ملاحظات إيجابية", "ملاحظات سلبية"];
+  const headers = ["الطالب", "المشاركة", "تصنيف", "الواجبات", "تصنيف", "المهام الأدائية", "تصنيف", "التطبيق العملي", "تصنيف", "التحريري", "تصنيف", "العملي", "تصنيف", "الإجمالي", "عدد الغياب", "ملاحظات إيجابية", "ملاحظات سلبية"];
   const rows = teacherReportCache.rowsData.map((r) => {
     const row = [r.student.full_name];
     r.results.forEach((c) => { const lvl = classifyLevel(c.avg, c.target); row.push(c.avg, lvl.label); });
-    row.push(r.total, r.posCount, r.negCount);
+    row.push(r.total, r.absenceCount, r.posCount, r.negCount);
     return row;
   });
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -663,12 +669,12 @@ function printTeacherReport(classTitle) {
   if (!teacherReportCache) return;
   const periodLabel = teacherReportCache.period === "p1" ? "الفترة الأولى" : "الفترة الثانية";
   const win = window.open("", "_blank");
-  const rowsHtml = teacherReportCache.rowsData.map((r) => `<tr><td style="text-align:right; font-weight:600;">${escapeHtml(r.student.full_name)}</td>${r.results.map((c) => { const lvl = classifyLevel(c.avg, c.target); return `<td>${c.avg}<br><span style="font-size:9px;">${lvl.label}</span></td>`; }).join("")}<td style="font-weight:800;">${r.total}</td><td>${r.posCount}</td><td>${r.negCount}</td></tr>`).join("");
+  const rowsHtml = teacherReportCache.rowsData.map((r) => `<tr><td style="text-align:right; font-weight:600;">${escapeHtml(r.student.full_name)}</td>${r.results.map((c) => { const lvl = classifyLevel(c.avg, c.target); return `<td>${c.avg}<br><span style="font-size:9px;">${lvl.label}</span></td>`; }).join("")}<td style="font-weight:800;">${r.total}</td><td>${r.absenceCount}</td><td>${r.posCount}</td><td>${r.negCount}</td></tr>`).join("");
   win.document.write(`
     <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقرير خاص بالفصل ${escapeHtml(classTitle)}</title>
     <style>@page { size: landscape; margin: 10mm; } body { font-family: Tajawal, Arial, sans-serif; direction: rtl; margin: 0; padding: 20px; } h2 { margin-bottom: 4px; } p { color: #555; margin-bottom: 16px; } table { width: 100%; border-collapse: collapse; font-size: 11px; } th, td { border: 1px solid #999; padding: 6px 8px; text-align: center; } thead th { background: #eee; }</style>
     </head><body><h2>تقرير خاص بالفصل: ${escapeHtml(classTitle)}</h2><p>${periodLabel} · مستوى جيد · يحتاج تحسين · يحتاج متابعة عاجلة</p>
-    <table><thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>تحريري</th><th>عملي</th><th>الإجمالي</th><th>إيجابية</th><th>سلبية</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+    <table><thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>تحريري</th><th>عملي</th><th>الإجمالي</th><th>عدد الغياب</th><th>إيجابية</th><th>سلبية</th></tr></thead><tbody>${rowsHtml}</tbody></table>
     </body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 400);

@@ -45,6 +45,15 @@ function renderCVEditor() {
       <div>
         <div class="section-card" style="margin-bottom:18px;">
           <div class="section-head"><h3>البيانات الشخصية</h3></div>
+          <div style="display:flex; align-items:center; gap:14px; margin-bottom:16px;">
+            <div id="cvPhotoPreview" style="width:64px; height:64px; border-radius:50%; overflow:hidden; border:2px solid var(--border-soft); flex-shrink:0; background:var(--bg-surface-2); display:flex; align-items:center; justify-content:center;">
+              ${d.photo_url ? `<img src="${d.photo_url}" style="width:100%; height:100%; object-fit:cover;" />` : `<span style="color:var(--text-muted); font-size:11px;">بدون صورة</span>`}
+            </div>
+            <div>
+              <input type="file" id="cv_photo_input" accept="image/*" style="margin-bottom:6px;" />
+              <div style="font-size:11px; color:var(--text-muted);">صورة شخصية رسمية (اختياري)</div>
+            </div>
+          </div>
           <div class="field"><label>الاسم الكامل</label><input type="text" id="cv_name" value="${escapeAttrCv(d.full_name)}" /></div>
           <div class="field"><label>المسمى الوظيفي</label><input type="text" id="cv_title" value="${escapeAttrCv(d.job_title)}" /></div>
           <div class="field"><label>البريد الإلكتروني</label><input type="text" id="cv_email" value="${escapeAttrCv(d.email)}" /></div>
@@ -104,6 +113,23 @@ function renderCVEditor() {
   renderExpList(); renderEduList(); renderSkillsList(); renderPoolCheckboxes();
   updatePreview();
 
+  document.getElementById("cv_photo_input").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const preview = document.getElementById("cvPhotoPreview");
+    preview.innerHTML = '<span class="loading-spin" style="border-top-color:var(--navy);"></span>';
+    try {
+      const filePath = `cv/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
+      const { error: upErr } = await supabaseClient.storage.from("maharat-files").upload(filePath, file);
+      if (upErr) throw upErr;
+      const { data: pub } = await supabaseClient.storage.from("maharat-files").getPublicUrl(filePath);
+      cvData.photo_url = pub.publicUrl;
+      preview.innerHTML = `<img src="${cvData.photo_url}" style="width:100%; height:100%; object-fit:cover;" />`;
+      updatePreview();
+    } catch (err) {
+      preview.innerHTML = `<span style="color:var(--text-muted); font-size:11px;">فشل الرفع</span>`;
+    }
+  });
   document.getElementById("cv_name").addEventListener("input", (e) => { cvData.full_name = e.target.value; updatePreview(); });
   document.getElementById("cv_title").addEventListener("input", (e) => { cvData.job_title = e.target.value; updatePreview(); });
   document.getElementById("cv_email").addEventListener("input", (e) => { cvData.email = e.target.value; updatePreview(); });
@@ -204,7 +230,8 @@ async function saveCv() {
   const payload = {
     full_name: cvData.full_name, job_title: cvData.job_title, email: cvData.email, phone: cvData.phone,
     summary: cvData.summary, experience: cvData.experience, education: cvData.education, skills: cvData.skills,
-    selected_sections: cvData.selected_sections, template: cvData.template, updated_at: new Date().toISOString(),
+    selected_sections: cvData.selected_sections, template: cvData.template, photo_url: cvData.photo_url || null,
+    updated_at: new Date().toISOString(),
   };
   let error;
   if (cvData.id) {
@@ -227,92 +254,118 @@ function buildCvBodyHtml() {
   const pool = cvSectionsPool.filter((s) => d.selected_sections.includes(s.id));
 
   const expHtml = d.experience.filter((e) => e.title).map((e) => `
-    <div style="margin-bottom:14px;">
-      <div style="font-weight:700; font-size:14px;">${escapeHtmlCv(e.title)} ${e.org ? "— " + escapeHtmlCv(e.org) : ""}</div>
-      <div style="font-size:11px; color:#888; margin-bottom:4px;">${escapeHtmlCv(e.period)}</div>
-      <div style="font-size:12px; color:#333;">${escapeHtmlCv(e.desc)}</div>
+    <div style="margin-bottom:13px;">
+      <div style="font-weight:700; font-size:12.5px;">${escapeHtmlCv(e.title)} ${e.org ? "— " + escapeHtmlCv(e.org) : ""}</div>
+      <div style="font-size:10px; color:#8a8a8a; margin-bottom:3px;">${escapeHtmlCv(e.period)}</div>
+      <div style="font-size:11px; color:#3a3a3a; line-height:1.7;">${escapeHtmlCv(e.desc)}</div>
     </div>`).join("");
 
   const eduHtml = d.education.filter((e) => e.degree).map((e) => `
-    <div style="margin-bottom:10px;">
-      <div style="font-weight:700; font-size:14px;">${escapeHtmlCv(e.degree)}</div>
-      <div style="font-size:12px; color:#555;">${escapeHtmlCv(e.institution)} ${e.year ? "· " + escapeHtmlCv(e.year) : ""}</div>
+    <div style="margin-bottom:9px;">
+      <div style="font-weight:700; font-size:12.5px;">${escapeHtmlCv(e.degree)}</div>
+      <div style="font-size:11px; color:#555;">${escapeHtmlCv(e.institution)} ${e.year ? "· " + escapeHtmlCv(e.year) : ""}</div>
     </div>`).join("");
 
-  const skillsHtml = d.skills.map((s) => `<span style="display:inline-block; padding:5px 12px; border-radius:999px; font-size:11px; margin:3px;">${escapeHtmlCv(s)}</span>`).join("");
-
   const poolHtml = pool.map((s) => `
-    <div style="margin-bottom:14px;">
-      <div style="font-weight:700; font-size:14px; margin-bottom:6px;">${escapeHtmlCv(s.title)}</div>
-      <ul style="margin:0; padding-inline-start:18px; font-size:12px; color:#333; line-height:1.9;">
+    <div style="margin-bottom:13px;">
+      <div style="font-weight:700; font-size:12.5px; margin-bottom:5px;">${escapeHtmlCv(s.title)}</div>
+      <ul style="margin:0; padding-inline-start:16px; font-size:11px; color:#3a3a3a; line-height:1.85;">
         ${s.items.map((t) => `<li>${escapeHtmlCv(t)}</li>`).join("")}
       </ul>
     </div>`).join("");
 
-  return { expHtml, eduHtml, skillsHtml, poolHtml };
+  return { expHtml, eduHtml, poolHtml };
 }
 
+const CV_ACCENT = "#0F2542";
+const CV_GOLD = "#B8862E";
+
+function cvPhotoHtml(size, borderColor) {
+  const d = cvData;
+  if (d.photo_url) {
+    return `<img src="${d.photo_url}" style="width:${size}px; height:${size}px; border-radius:50%; object-fit:cover; border:3px solid ${borderColor}; flex-shrink:0;" />`;
+  }
+  return `<div style="width:${size}px; height:${size}px; border-radius:50%; background:#e8ecf2; border:3px solid ${borderColor}; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:${Math.round(size * 0.4)}px; font-weight:800; color:${CV_ACCENT};">${escapeHtmlCv((d.full_name || "؟").charAt(0))}</div>`;
+}
+
+function sectionTitleHtml(text, color) {
+  return `<div style="display:flex; align-items:center; gap:8px; margin-bottom:11px; margin-top:4px;"><span style="width:16px; height:3px; background:${color || CV_GOLD}; display:inline-block;"></span><span style="font-weight:800; font-size:13px; letter-spacing:0.3px;">${text}</span></div>`;
+}
+
+// A4 = 210mm × 297mm. الصفحة مؤطرة بحد خارجي وهامش داخلي ثابت يناسب الطباعة.
 function renderTemplateHtml(template) {
   const d = cvData;
-  const { expHtml, eduHtml, skillsHtml, poolHtml } = buildCvBodyHtml();
-  const accent = "#0F2542", gold = "#B8862E";
+  const { expHtml, eduHtml, poolHtml } = buildCvBodyHtml();
+  const contact = [d.email, d.phone].filter(Boolean).join("   ·   ");
 
-  if (template === "classic") {
-    return `
-    <div style="font-family:'Tajawal',Arial,sans-serif; direction:rtl; display:flex; min-height:100%; color:#222;">
-      <div style="width:32%; background:${accent}; color:#fff; padding:26px 20px;">
-        <div style="font-size:20px; font-weight:800; margin-bottom:4px;">${escapeHtmlCv(d.full_name)}</div>
-        <div style="font-size:12px; color:${gold}; margin-bottom:20px;">${escapeHtmlCv(d.job_title)}</div>
-        <div style="font-size:11px; line-height:2; margin-bottom:20px;">${d.email ? escapeHtmlCv(d.email) + "<br>" : ""}${d.phone ? escapeHtmlCv(d.phone) : ""}</div>
-        <div style="font-weight:700; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.3); padding-bottom:6px; margin-bottom:10px;">المهارات</div>
-        <div>${d.skills.map((s) => `<div style="font-size:11px; padding:4px 0;">• ${escapeHtmlCv(s)}</div>`).join("")}</div>
-      </div>
-      <div style="width:68%; padding:26px 24px;">
-        ${d.summary ? `<div style="margin-bottom:18px; font-size:12.5px; line-height:1.9; color:#444;">${escapeHtmlCv(d.summary)}</div>` : ""}
-        ${expHtml ? `<div style="font-weight:800; font-size:14px; color:${accent}; border-bottom:2px solid ${gold}; padding-bottom:4px; margin-bottom:12px;">الخبرة العملية</div>${expHtml}` : ""}
-        ${eduHtml ? `<div style="font-weight:800; font-size:14px; color:${accent}; border-bottom:2px solid ${gold}; padding-bottom:4px; margin:18px 0 12px;">المؤهل العلمي</div>${eduHtml}` : ""}
-        ${poolHtml}
+  const pageOuter = (innerHtml, frameColor) => `
+    <div style="width:210mm; min-height:297mm; margin:0 auto; background:#fff; box-sizing:border-box; border:2px solid ${frameColor || CV_ACCENT}; padding:6mm; font-family:'Tajawal',Arial,sans-serif; direction:rtl; color:#222;">
+      <div style="width:100%; height:100%; border:1px solid #d9dde5; box-sizing:border-box; padding:14mm 15mm;">
+        ${innerHtml}
       </div>
     </div>`;
+
+  if (template === "classic") {
+    const inner = `
+      <div style="display:flex; gap:18px; min-height:100%;">
+        <div style="width:33%; background:${CV_ACCENT}; color:#fff; padding:22px 16px; border-radius:6px;">
+          <div style="display:flex; justify-content:center; margin-bottom:14px;">${cvPhotoHtml(84, "#fff")}</div>
+          <div style="text-align:center; font-size:17px; font-weight:800; margin-bottom:2px;">${escapeHtmlCv(d.full_name)}</div>
+          <div style="text-align:center; font-size:11px; color:${CV_GOLD}; margin-bottom:18px;">${escapeHtmlCv(d.job_title)}</div>
+          <div style="border-top:1px solid rgba(255,255,255,0.25); padding-top:12px; font-size:10.5px; line-height:2;">
+            ${d.email ? `<div>${escapeHtmlCv(d.email)}</div>` : ""}${d.phone ? `<div>${escapeHtmlCv(d.phone)}</div>` : ""}
+          </div>
+          ${d.skills.length ? `<div style="border-top:1px solid rgba(255,255,255,0.25); margin-top:14px; padding-top:12px;"><div style="font-weight:700; font-size:11px; margin-bottom:8px;">المهارات</div>${d.skills.map((s) => `<div style="font-size:10.5px; padding:3px 0;">• ${escapeHtmlCv(s)}</div>`).join("")}</div>` : ""}
+        </div>
+        <div style="width:67%; padding-top:4px;">
+          ${d.summary ? `<div style="font-size:11.5px; line-height:1.85; color:#444; margin-bottom:16px;">${escapeHtmlCv(d.summary)}</div>` : ""}
+          ${expHtml ? sectionTitleHtml("الخبرة العملية") + expHtml : ""}
+          ${eduHtml ? sectionTitleHtml("المؤهل العلمي") + eduHtml : ""}
+          ${poolHtml}
+        </div>
+      </div>`;
+    return pageOuter(inner);
   }
 
   if (template === "bold") {
-    return `
-    <div style="font-family:'Tajawal',Arial,sans-serif; direction:rtl; color:#222;">
-      <div style="background:linear-gradient(120deg, ${accent}, #1c3f6b); color:#fff; padding:30px 26px;">
-        <div style="font-size:24px; font-weight:800;">${escapeHtmlCv(d.full_name)}</div>
-        <div style="font-size:13px; color:${gold}; margin-top:4px;">${escapeHtmlCv(d.job_title)}</div>
-        <div style="font-size:11px; margin-top:10px; opacity:0.85;">${[d.email, d.phone].filter(Boolean).join(" · ")}</div>
+    const inner = `
+      <div style="background:${CV_ACCENT}; color:#fff; padding:22px 24px; border-radius:6px; display:flex; align-items:center; gap:18px; margin-bottom:20px;">
+        ${cvPhotoHtml(76, CV_GOLD)}
+        <div>
+          <div style="font-size:21px; font-weight:800;">${escapeHtmlCv(d.full_name)}</div>
+          <div style="font-size:12px; color:${CV_GOLD}; margin-top:3px;">${escapeHtmlCv(d.job_title)}</div>
+          ${contact ? `<div style="font-size:10.5px; margin-top:8px; opacity:0.85;">${escapeHtmlCv(contact)}</div>` : ""}
+        </div>
       </div>
-      <div style="padding:24px 26px;">
-        ${d.summary ? `<div style="margin-bottom:18px; font-size:12.5px; line-height:1.9; color:#444;">${escapeHtmlCv(d.summary)}</div>` : ""}
-        ${skillsHtml ? `<div style="margin-bottom:18px;">${skillsHtml.replace(/padding:5px 12px;/g, `padding:5px 12px; background:${accent}; color:#fff;`)}</div>` : ""}
-        ${expHtml ? `<div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;"><span style="width:10px; height:10px; background:${gold};"></span><span style="font-weight:800; font-size:14px;">الخبرة العملية</span></div>${expHtml}` : ""}
-        ${eduHtml ? `<div style="display:flex; align-items:center; gap:8px; margin:18px 0 12px;"><span style="width:10px; height:10px; background:${gold};"></span><span style="font-weight:800; font-size:14px;">المؤهل العلمي</span></div>${eduHtml}` : ""}
-        ${poolHtml}
-      </div>
-    </div>`;
+      ${d.summary ? `<div style="font-size:11.5px; line-height:1.85; color:#444; margin-bottom:18px;">${escapeHtmlCv(d.summary)}</div>` : ""}
+      ${d.skills.length ? `<div style="margin-bottom:18px;">${d.skills.map((s) => `<span style="display:inline-block; padding:5px 13px; margin:3px; border-radius:999px; font-size:10.5px; background:${CV_ACCENT}; color:#fff;">${escapeHtmlCv(s)}</span>`).join("")}</div>` : ""}
+      ${expHtml ? sectionTitleHtml("الخبرة العملية") + expHtml : ""}
+      ${eduHtml ? sectionTitleHtml("المؤهل العلمي") + eduHtml : ""}
+      ${poolHtml}`;
+    return pageOuter(inner, CV_GOLD);
   }
 
   // modern (افتراضي)
-  return `
-    <div style="font-family:'Tajawal',Arial,sans-serif; direction:rtl; padding:28px 26px; color:#222;">
-      <div style="border-bottom:3px solid ${accent}; padding-bottom:14px; margin-bottom:18px;">
-        <div style="font-size:22px; font-weight:800; color:${accent};">${escapeHtmlCv(d.full_name)}</div>
-        <div style="font-size:13px; color:${gold}; margin-top:2px;">${escapeHtmlCv(d.job_title)}</div>
-        <div style="font-size:11px; color:#777; margin-top:6px;">${[d.email, d.phone].filter(Boolean).join(" · ")}</div>
+  const inner = `
+    <div style="display:flex; align-items:center; gap:16px; border-bottom:3px solid ${CV_ACCENT}; padding-bottom:16px; margin-bottom:18px;">
+      ${cvPhotoHtml(72, CV_ACCENT)}
+      <div>
+        <div style="font-size:20px; font-weight:800; color:${CV_ACCENT};">${escapeHtmlCv(d.full_name)}</div>
+        <div style="font-size:12px; color:${CV_GOLD}; margin-top:2px;">${escapeHtmlCv(d.job_title)}</div>
+        ${contact ? `<div style="font-size:10.5px; color:#888; margin-top:6px;">${escapeHtmlCv(contact)}</div>` : ""}
       </div>
-      ${d.summary ? `<div style="margin-bottom:18px; font-size:12.5px; line-height:1.9; color:#444;">${escapeHtmlCv(d.summary)}</div>` : ""}
-      ${skillsHtml ? `<div style="margin-bottom:18px;">${skillsHtml.replace(/padding:5px 12px;/g, `padding:5px 12px; background:#f0f1f6; border:1px solid #ddd;`)}</div>` : ""}
-      ${expHtml ? `<div style="font-weight:800; font-size:14px; color:${accent}; margin-bottom:12px;">الخبرة العملية</div>${expHtml}` : ""}
-      ${eduHtml ? `<div style="font-weight:800; font-size:14px; color:${accent}; margin:18px 0 12px;">المؤهل العلمي</div>${eduHtml}` : ""}
-      ${poolHtml}
-    </div>`;
+    </div>
+    ${d.summary ? `<div style="font-size:11.5px; line-height:1.85; color:#444; margin-bottom:18px;">${escapeHtmlCv(d.summary)}</div>` : ""}
+    ${d.skills.length ? `<div style="margin-bottom:18px;">${d.skills.map((s) => `<span style="display:inline-block; padding:5px 13px; margin:3px; border-radius:999px; font-size:10.5px; background:#f0f1f6; border:1px solid #dde1ea;">${escapeHtmlCv(s)}</span>`).join("")}</div>` : ""}
+    ${expHtml ? sectionTitleHtml("الخبرة العملية", CV_ACCENT) + expHtml : ""}
+    ${eduHtml ? sectionTitleHtml("المؤهل العلمي", CV_ACCENT) + eduHtml : ""}
+    ${poolHtml}`;
+  return pageOuter(inner);
 }
 
 function updatePreview() {
   const wrap = document.getElementById("cvPreviewWrap");
-  wrap.innerHTML = `<div style="width:100%; min-height:1000px;">${renderTemplateHtml(cvData.template)}</div>`;
+  wrap.innerHTML = `<div style="padding:16px; background:#e9ebf0; display:flex; justify-content:center;">${renderTemplateHtml(cvData.template)}</div>`;
 }
 
 // ============ التنزيل ============
@@ -320,7 +373,7 @@ function updatePreview() {
 function downloadCvPdf() {
   const html = renderTemplateHtml(cvData.template);
   const win = window.open("", "_blank");
-  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>السيرة الذاتية - ${escapeHtmlCv(cvData.full_name)}</title><style>@page{margin:0;} body{margin:0;}</style></head><body>${html}</body></html>`);
+  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>السيرة الذاتية - ${escapeHtmlCv(cvData.full_name)}</title><style>@page{size:A4; margin:0;} body{margin:0;}</style></head><body>${html}</body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 400);
 }
