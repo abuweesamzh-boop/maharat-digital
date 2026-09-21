@@ -2,7 +2,8 @@ const BUCKET_NAME = "maharat-files";
 const FOLDER_COLORS = ["#0F2542", "#B8862E", "#3C6E5A", "#7A4B8A", "#1F6F8B", "#8A4B3C", "#4B6B8A", "#6B4B8A"];
 let currentModule = null;
 let navStack = [];
-const MODULE_LABELS = { portfolio: { page: "ملف إنجاز المعلم", icon: "folder" } };
+const MODULE_LABELS = { portfolio: { page: "ملف إنجاز المعلم", icon: "folder" }, external: { page: "مهارات رقمية - الصفوف", icon: "rocket" } };
+function renderExternalLinksSection() { renderModule("external"); }
 function renderPortfolioSection() { renderModule("portfolio"); }
 function colorFor(i) { return FOLDER_COLORS[i % FOLDER_COLORS.length]; }
 function escapeHtml(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
@@ -115,9 +116,10 @@ async function loadItems(sectionId) {
   if (!data || data.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه مرفقات بهذا القسم بعد</div>`; return; }
   holder.innerHTML = data.map((item) => `
     <div class="item-row">
-      <div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div></div>
+      <div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}${item.external_url ? ` <span class="sub-badge">رابط خارجي</span>` : ""}</div></div>
       <div class="actions">
         ${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">${icon("eye", 15)}</a>` : ""}
+        ${item.external_url ? `<a class="icon-btn" href="${item.external_url}" target="_blank" title="فتح الرابط">${icon("link", 15)}</a>` : ""}
         <button class="icon-btn" onclick="openMoveItemModal('${item.id}', '${sectionId}')" title="نقل لقسم آخر">${icon("move", 15)}</button>
         <button class="icon-btn danger" onclick="deleteItem('${item.id}')" title="حذف">${icon("trash", 15)}</button>
       </div>
@@ -229,32 +231,58 @@ async function openMoveItemModal(itemId, currentSectionId) {
 function openAddItemModal(sectionId, sectionTitle) {
   document.getElementById("modalTitle").textContent = "إضافة مرفق إلى: " + sectionTitle;
   document.getElementById("modalFields").innerHTML = `
+    <div class="field"><label>نوع المرفق</label>
+      <div class="btn-pill-choice" id="itemTypeChoice">
+        <button type="button" class="positive active" data-type="file">ملف</button>
+        <button type="button" data-type="link">رابط خارجي</button>
+      </div>
+    </div>
     <div class="field"><label>العنوان</label><input type="text" id="f_title" required /></div>
     <div class="field"><label>الوصف (اختياري)</label><input type="text" id="f_description" /></div>
-    <div class="field"><label>الملف (أي صيغة)</label><input type="file" id="f_file" /></div>
-    <div class="field"><label>التقط صورة مباشرة بالكاميرا</label><input type="file" id="f_camera" accept="image/*" capture="environment" /></div>
+    <div id="fileFieldsHolder">
+      <div class="field"><label>الملف (أي صيغة)</label><input type="file" id="f_file" /></div>
+      <div class="field"><label>التقط صورة مباشرة بالكاميرا</label><input type="file" id="f_camera" accept="image/*" capture="environment" /></div>
+    </div>
+    <div id="linkFieldsHolder" style="display:none;">
+      <div class="field"><label>الرابط</label><input type="text" id="f_url" placeholder="https://..." /></div>
+    </div>
   `;
+  let itemType = "file";
+  document.querySelectorAll("#itemTypeChoice button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#itemTypeChoice button").forEach((b) => b.classList.remove("active", "positive"));
+      btn.classList.add("active", "positive");
+      itemType = btn.dataset.type;
+      document.getElementById("fileFieldsHolder").style.display = itemType === "file" ? "" : "none";
+      document.getElementById("linkFieldsHolder").style.display = itemType === "link" ? "" : "none";
+    });
+  });
   document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("modalForm").onsubmit = async (e) => { e.preventDefault(); await submitItem(sectionId); };
+  document.getElementById("modalForm").onsubmit = async (e) => { e.preventDefault(); await submitItem(sectionId, itemType); };
   document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
 }
 
-async function submitItem(sectionId) {
+async function submitItem(sectionId, itemType) {
   const submitBtn = document.getElementById("modalSubmit");
   submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
   const title = document.getElementById("f_title").value.trim();
   const description = document.getElementById("f_description").value.trim();
-  const file = document.getElementById("f_camera").files[0] || document.getElementById("f_file").files[0];
-  let fileUrl = null, fileType = null;
+  let fileUrl = null, fileType = null, externalUrl = null;
   try {
-    if (file) {
-      const filePath = `${currentModule}/${Date.now()}_${sanitizeFileName(file.name)}`;
-      const { error: uploadError } = await supabaseClient.storage.from(BUCKET_NAME).upload(filePath, file);
-      if (uploadError) throw uploadError;
-      const { data: publicUrlData } = supabaseClient.storage.from(BUCKET_NAME).getPublicUrl(filePath);
-      fileUrl = publicUrlData.publicUrl; fileType = file.name.split(".").pop();
+    if (itemType === "link") {
+      externalUrl = document.getElementById("f_url").value.trim();
+      if (!externalUrl) { alert("اكتب الرابط"); submitBtn.disabled = false; submitBtn.textContent = "حفظ"; return; }
+    } else {
+      const file = document.getElementById("f_camera").files[0] || document.getElementById("f_file").files[0];
+      if (file) {
+        const filePath = `${currentModule}/${Date.now()}_${sanitizeFileName(file.name)}`;
+        const { error: uploadError } = await supabaseClient.storage.from(BUCKET_NAME).upload(filePath, file);
+        if (uploadError) throw uploadError;
+        const { data: publicUrlData } = supabaseClient.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+        fileUrl = publicUrlData.publicUrl; fileType = file.name.split(".").pop();
+      }
     }
-    const { error: insertError } = await supabaseClient.from("content_items").insert({ title, description, section_id: sectionId, file_url: fileUrl, file_type: fileType });
+    const { error: insertError } = await supabaseClient.from("content_items").insert({ title, description, section_id: sectionId, file_url: fileUrl, file_type: fileType, external_url: externalUrl });
     if (insertError) throw insertError;
     document.getElementById("modalOverlay").classList.remove("show");
     await loadItems(sectionId);

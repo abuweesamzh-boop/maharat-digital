@@ -5,7 +5,7 @@ let viewCurrentModule = null;
 let viewCurrentClass = null;
 let viewReportPeriod = "p1";
 
-const MODULE_LABELS_VIEW = { portfolio: "ملف إنجاز المعلم" };
+const MODULE_LABELS_VIEW = { portfolio: "ملف إنجاز المعلم", external: "مهارات رقمية - الصفوف" };
 const COMPONENT_DEFS_VIEW = [
   { key: "participation", label: "المشاركة", target: 10, field: "participation" },
   { key: "homework", label: "الواجبات", target: 10, field: "homework" },
@@ -70,7 +70,7 @@ function updateTabStyles() {
 
 function renderTabBody() {
   if (viewTab === "tracking") renderTrackingTab();
-  else if (viewTab === "extlinks") renderExtLinksViewTab();
+  else if (viewTab === "extlinks") { viewCurrentModule = "external"; renderFolderTab(); }
   else { viewCurrentModule = viewTab; renderFolderTab(); }
 }
 
@@ -190,7 +190,7 @@ function renderFolderLevel() {
     <div class="section-card" style="margin-bottom:18px;"><div class="section-head"><h3>الأقسام الفرعية</h3></div>
       ${subs.length === 0 ? `<div class="empty-state">ما فيه أقسام فرعية</div>` : `<div class="folder-grid">${subs.map((s, i) => `<div class="folder-card" style="--folder-color:${["#0F2542","#B8862E","#3C6E5A","#7A4B8A","#1F6F8B","#8A4B3C"][(s.color_index ?? i) % 6]}" onclick="viewNavStack.push({id:'${s.id}', title:'${escapeAttr(s.title)}'}); renderFolderLevel();"><div class="folder-title">${escapeHtml(s.title)}</div></div>`).join("")}</div>`}
     </div>
-    ${parentId ? `<div class="section-card"><div class="section-head"><h3>المرفقات</h3></div>${items.length === 0 ? `<div class="empty-state">ما فيه مرفقات</div>` : items.map((item) => `<div class="item-row"><div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div></div><div class="actions">${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">${icon("eye", 15)}</a>` : ""}</div></div>`).join("")}</div>` : ""}`;
+    ${parentId ? `<div class="section-card"><div class="section-head"><h3>المرفقات</h3></div>${items.length === 0 ? `<div class="empty-state">ما فيه مرفقات</div>` : items.map((item) => `<div class="item-row"><div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div></div><div class="actions">${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">${icon("eye", 15)}</a>` : ""}${item.external_url ? `<a class="icon-btn" href="${item.external_url}" target="_blank" title="فتح الرابط">${icon("link", 15)}</a>` : ""}</div></div>`).join("")}</div>` : ""}`;
 }
 
 initView();
