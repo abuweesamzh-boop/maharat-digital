@@ -206,6 +206,10 @@ body { font-family: var(--font-body); background: var(--bg-deep); color: var(--t
 .session-pill .del { position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; border-radius: 6px; background: var(--bg-surface-2); color: var(--text-muted); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
 .session-pill:hover .del { opacity: 1; }
 .session-pill .del:hover { color: var(--danger); }
+.session-pill .edit-sess { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 6px; background: var(--bg-surface-2); color: var(--text-muted); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
+.session-pill:hover .edit-sess { opacity: 1; }
+.session-pill .edit-sess:hover { color: var(--navy); }
+.session-pill .day { font-size: 10px; color: var(--gold); font-weight: 700; margin-top: 2px; }
 
 .period-toggle { display: inline-flex; background: var(--bg-surface); border: 1px solid var(--border-soft); border-radius: 10px; padding: 4px; gap: 4px; margin-bottom: 18px; }
 .period-toggle button { border: none; background: transparent; color: var(--text-muted); padding: 9px 18px; border-radius: 8px; font-family: var(--font-body); font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.15s, color 0.15s; }
@@ -252,7 +256,27 @@ body { font-family: var(--font-body); background: var(--bg-deep); color: var(--t
 
 .quick-note-btn { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--border-soft); background: var(--bg-deep); color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .quick-note-btn.has-note { border-color: var(--gold); color: var(--gold); }
-.quick-note-popover { position: absolute; background: var(--bg-surface); border: 1px solid var(--border-soft); border-radius: 12px; padding: 14px; box-shadow: 0 10px 30px -8px rgba(15,25,40,0.3); z-index: 50; width: 270px; }
+.quick-note-popover { position: absolute; background: var(--bg-surface); border: 1px solid var(--border-soft); border-radius: 12px; padding: 14px; box-shadow: 0 10px 30px -8px rgba(15,25,40,0.3); z-index: 50; width: 300px; }
+
+.note-pill-section { margin-bottom: 10px; }
+.note-pill-label { font-size: 11px; font-weight: 700; margin: 2px 0 6px; }
+.note-pill-label.positive { color: var(--success); }
+.note-pill-label.negative { color: var(--danger); }
+.note-pill-wrap { display: flex; flex-wrap: wrap; gap: 7px; max-height: 160px; overflow-y: auto; padding: 2px; }
+.note-pill { border-radius: 999px; padding: 7px 13px; font-size: 11.5px; font-weight: 700; cursor: pointer; font-family: var(--font-body); background: var(--bg-surface); transition: background 0.12s, color 0.12s, border-color 0.12s; line-height: 1.4; }
+.note-pill.positive { border: 1.6px solid var(--success); color: var(--success); }
+.note-pill.positive.selected { background: var(--success); color: #fff; }
+.note-pill.negative { border: 1.6px solid var(--danger); color: var(--danger); }
+.note-pill.negative.selected { background: var(--danger); color: #fff; }
+.note-custom-row { display: flex; gap: 6px; margin: 10px 0; }
+.note-custom-type { width: 84px; font-size: 11px; background: var(--bg-surface); border: 1px solid var(--border-soft); border-radius: 8px; padding: 6px; color: var(--text-primary); font-family: var(--font-body); }
+.note-custom-input { flex: 1; font-size: 12px; padding: 7px 10px; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); font-family: var(--font-body); }
+.note-custom-add { width: 34px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--gold); background: rgba(184,134,46,0.1); color: var(--gold); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.note-selected-strip { display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px dashed var(--border-soft); padding-top: 10px; min-height: 30px; }
+.note-selected-empty { font-size: 11px; color: var(--text-muted); }
+.note-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--navy); color: #fff; border-radius: 999px; padding: 5px 6px 5px 11px; font-size: 11px; font-weight: 700; }
+.note-chip.negative { background: var(--danger); }
+.note-chip-x { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: rgba(255,255,255,0.22); cursor: pointer; flex-shrink: 0; }
 
 .toolbar-icon-btn {
   display: inline-flex; align-items: center; gap: 8px;

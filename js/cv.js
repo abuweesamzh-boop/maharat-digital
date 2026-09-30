@@ -89,6 +89,7 @@ function renderCVEditor() {
             <button type="button" data-tpl="modern" class="${d.template === "modern" ? "active positive" : ""}">عصري بسيط</button>
             <button type="button" data-tpl="classic" class="${d.template === "classic" ? "active positive" : ""}">كلاسيكي احترافي</button>
             <button type="button" data-tpl="bold" class="${d.template === "bold" ? "active positive" : ""}">جريء معاصر</button>
+            <button type="button" data-tpl="wave" class="${d.template === "wave" ? "active positive" : ""}">موجي</button>
           </div>
         </div>
       </div>
@@ -230,8 +231,8 @@ async function saveCv() {
   const payload = {
     full_name: cvData.full_name, job_title: cvData.job_title, email: cvData.email, phone: cvData.phone,
     summary: cvData.summary, experience: cvData.experience, education: cvData.education, skills: cvData.skills,
-    selected_sections: cvData.selected_sections, template: cvData.template, photo_url: cvData.photo_url || null,
-    updated_at: new Date().toISOString(),
+    selected_sections: cvData.selected_sections, template: cvData.template,
+    photo_url: cvData.photo_url || null, updated_at: new Date().toISOString(),
   };
   let error;
   if (cvData.id) {
@@ -276,6 +277,7 @@ function buildCvBodyHtml() {
 
   return { expHtml, eduHtml, poolHtml };
 }
+
 
 const CV_ACCENT = "#0F2542";
 const CV_GOLD = "#B8862E";
@@ -343,6 +345,26 @@ function renderTemplateHtml(template) {
       ${eduHtml ? sectionTitleHtml("المؤهل العلمي") + eduHtml : ""}
       ${poolHtml}`;
     return pageOuter(inner, CV_GOLD);
+  }
+
+  if (template === "wave") {
+    const inner = `
+      <div style="display:flex; gap:0; margin:-14mm -15mm; min-height:297mm;">
+        <div style="width:36%; background:#1B2430; color:#fff; padding:30px 20px;">
+          <div style="display:flex; justify-content:center; margin-bottom:16px;">${cvPhotoHtml(100, CV_GOLD)}</div>
+          <div style="text-align:center; font-size:16px; font-weight:800; margin-bottom:2px;">${escapeHtmlCv(d.full_name)}</div>
+          <div style="text-align:center; font-size:11px; color:${CV_GOLD}; margin-bottom:22px;">${escapeHtmlCv(d.job_title)}</div>
+          ${eduHtml ? `<div style="background:#fff; color:#1B2430; border-radius:0 32px 32px 0; padding:14px 16px; margin:0 -20px 16px 0;"><div style="font-weight:800; font-size:12px; margin-bottom:8px;">التعليم</div>${eduHtml}</div>` : ""}
+          ${d.skills.length ? `<div style="background:#26313F; border-radius:0 32px 32px 0; padding:14px 16px; margin:0 -20px 16px 0;"><div style="font-weight:800; font-size:12px; margin-bottom:8px; color:${CV_GOLD};">المهارات</div>${d.skills.map((s) => `<div style="font-size:10.5px; padding:2px 0;">• ${escapeHtmlCv(s)}</div>`).join("")}</div>` : ""}
+        </div>
+        <div style="width:64%; padding:30px 26px;">
+          ${d.summary ? sectionTitleHtml("نبذة عني") + `<div style="font-size:11.5px; line-height:1.85; color:#444; margin-bottom:16px;">${escapeHtmlCv(d.summary)}</div>` : ""}
+          ${contact ? sectionTitleHtml("تفاصيل التواصل") + `<div style="font-size:11px; color:#555; margin-bottom:16px;">${escapeHtmlCv(contact)}</div>` : ""}
+          ${expHtml ? sectionTitleHtml("خبرات العمل") + expHtml : ""}
+          ${poolHtml}
+        </div>
+      </div>`;
+    return pageOuter(inner, "#1B2430");
   }
 
   // modern (افتراضي)
