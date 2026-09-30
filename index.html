@@ -1,39 +1,45 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>المنصة الإلكترونية للمعلم فيصل بن تويم الزهراني</title>
-<link rel="stylesheet" href="css/style.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body>
-<div class="pixel-field"></div>
-<div class="login-wrap">
-  <div class="brand-panel">
-    <div class="brand-badge"><span class="dot"></span> منصة تعليمية</div>
-    <h1 style="font-size:clamp(24px, 3.2vw, 38px);">المنصة الإلكترونية<br>للمعلم <span>فيصل بن تويم الزهراني</span></h1>
-    <p>ملف إنجاز المعلم، سجل المتابعة، ودرجات الطلاب، كل شي بمكان واحد.</p>
-    <div class="role-strip">
-      <div class="role-chip"><b>معلم</b></div>
-      <div class="role-chip"><b>طالب</b></div>
-      <div class="role-chip"><b>مشرف</b></div>
+<body class="login-body">
+  <div class="login-wrap">
+    <div class="login-brand">
+      <div class="brand-pattern"></div>
+      <div class="brand-content">
+        <div class="brand-badge">منصة تعليمية</div>
+        <h1>المنصة الإلكترونية<br>للمعلم <span class="gold">فيصل بن تويم الزهراني</span></h1>
+        <p class="brand-sub">مادة المهارات الرقمية — مدرسة ابن الخطيب المتوسطة</p>
+        <div class="role-strip">
+          <span class="role-chip">معلم</span>
+          <span class="role-chip">طالب</span>
+          <span class="role-chip">مشرف</span>
+        </div>
+      </div>
+    </div>
+    <div class="login-form-panel">
+      <div class="login-form-inner">
+        <h2>تسجيل الدخول</h2>
+        <p class="muted">أدخل بيانات حسابك للمتابعة</p>
+        <form id="loginForm">
+          <label>البريد الإلكتروني</label>
+          <input type="email" id="email" required placeholder="example@email.com">
+          <label>كلمة المرور</label>
+          <input type="password" id="password" required placeholder="••••••••">
+          <div id="loginError" class="error-msg" style="display:none;"></div>
+          <button type="submit" class="btn-primary full">دخول</button>
+        </form>
+      </div>
     </div>
   </div>
-  <div class="form-panel">
-    <div class="login-card">
-      <h2>تسجيل الدخول</h2>
-      <p class="sub">أدخل بيانات حسابك للمتابعة</p>
-      <div class="error-msg" id="errorBox"></div>
-      <form id="loginForm">
-        <div class="field"><label>البريد الإلكتروني / اسم المستخدم</label><input type="text" id="emailInput" required /></div>
-        <div class="field"><label>كلمة المرور</label><input type="password" id="passwordInput" required /></div>
-        <button type="submit" class="btn-primary" id="loginBtn">دخول</button>
-      </form>
-    </div>
-  </div>
-</div>
-<script src="js/supabaseClient.js"></script>
-<script src="js/auth.js"></script>
+  <script src="js/supabaseClient.js"></script>
+  <script src="js/auth.js"></script>
 </body>
 </html>

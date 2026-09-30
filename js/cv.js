@@ -1,394 +1,380 @@
-// ============================================
-// السيرة الذاتية: نموذج تعبئة + معاينة حية + تنزيل Word/PDF
-// ============================================
+let cvData = {
+  id: null, full_name: "", title: "", email: "", phone: "", summary: "",
+  photo_url: "", experience: [], education: [], skills: [], languages: [],
+  selected_sections: [], template: "modern"
+};
+let cvPortfolioPool = [];
 
-let cvData = null;
-let cvSectionsPool = []; // كل أقسام ملف الإنجاز (رئيسية) مع مرفقاتها لبناء السيرة
-
-async function renderCVSection() {
-  document.getElementById("pageTitle").textContent = "السيرة الذاتية";
-  const contentArea = document.getElementById("contentArea");
-  contentArea.innerHTML = `<div class="empty-state">جاري التحميل...</div>`;
-
-  const { data: rows } = await supabaseClient.from("teacher_cv").select("*").limit(1);
-  cvData = (rows && rows[0]) || {
-    full_name: currentProfile ? currentProfile.full_name : "",
-    job_title: "معلم مهارات رقمية", email: "", phone: "", summary: "",
-    experience: [], education: [], skills: [], selected_sections: [], template: "modern",
-  };
-
+async function renderCVSection(){
+  const el = document.getElementById("contentArea");
+  el.innerHTML = `<div class="loading-placeholder">جاري التحميل...</div>`;
+  const { data: existing } = await supabaseClient.from("teacher_cv").select("*").limit(1).maybeSingle();
+  if (existing) {
+    cvData = {
+      id: existing.id,
+      full_name: existing.full_name || currentProfile?.full_name || "",
+      title: existing.title || "",
+      email: existing.email || "",
+      phone: existing.phone || "",
+      summary: existing.summary || "",
+      photo_url: existing.photo_url || "",
+      experience: existing.experience || [],
+      education: existing.education || [],
+      skills: existing.skills || [],
+      languages: existing.languages || [],
+      selected_sections: existing.selected_sections || [],
+      template: existing.template || "modern"
+    };
+  } else {
+    cvData.full_name = currentProfile?.full_name || "";
+  }
   await loadPortfolioPool();
   renderCVEditor();
 }
 
-async function loadPortfolioPool() {
-  const { data: roots } = await supabaseClient.from("content_sections").select("*").eq("module", "portfolio").is("parent_id", null).order("created_at");
-  cvSectionsPool = [];
-  for (const r of (roots || [])) {
-    const { data: items } = await supabaseClient.from("content_items").select("title").eq("section_id", r.id);
-    const { data: subs } = await supabaseClient.from("content_sections").select("*").eq("parent_id", r.id);
-    let allTitles = (items || []).map((i) => i.title);
-    for (const s of (subs || [])) {
-      const { data: subItems } = await supabaseClient.from("content_items").select("title").eq("section_id", s.id);
-      allTitles = allTitles.concat((subItems || []).map((i) => i.title));
-    }
-    cvSectionsPool.push({ id: r.id, title: r.title, items: allTitles });
-  }
+async function loadPortfolioPool(){
+  const { data: roots } = await supabaseClient.from("content_sections").select("*").eq("module","portfolio").is("parent_id", null);
+  cvPortfolioPool = roots || [];
 }
 
-function renderCVEditor() {
-  const contentArea = document.getElementById("contentArea");
-  const d = cvData;
-
-  contentArea.innerHTML = `
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;" id="cvGrid">
-      <div>
-        <div class="section-card" style="margin-bottom:18px;">
-          <div class="section-head"><h3>البيانات الشخصية</h3></div>
-          <div style="display:flex; align-items:center; gap:14px; margin-bottom:16px;">
-            <div id="cvPhotoPreview" style="width:64px; height:64px; border-radius:50%; overflow:hidden; border:2px solid var(--border-soft); flex-shrink:0; background:var(--bg-surface-2); display:flex; align-items:center; justify-content:center;">
-              ${d.photo_url ? `<img src="${d.photo_url}" style="width:100%; height:100%; object-fit:cover;" />` : `<span style="color:var(--text-muted); font-size:11px;">بدون صورة</span>`}
-            </div>
-            <div>
-              <input type="file" id="cv_photo_input" accept="image/*" style="margin-bottom:6px;" />
-              <div style="font-size:11px; color:var(--text-muted);">صورة شخصية رسمية (اختياري)</div>
-            </div>
-          </div>
-          <div class="field"><label>الاسم الكامل</label><input type="text" id="cv_name" value="${escapeAttrCv(d.full_name)}" /></div>
-          <div class="field"><label>المسمى الوظيفي</label><input type="text" id="cv_title" value="${escapeAttrCv(d.job_title)}" /></div>
-          <div class="field"><label>البريد الإلكتروني</label><input type="text" id="cv_email" value="${escapeAttrCv(d.email)}" /></div>
-          <div class="field"><label>الجوال</label><input type="text" id="cv_phone" value="${escapeAttrCv(d.phone)}" /></div>
-          <div class="field"><label>ملخص مهني (2-3 أسطر)</label><textarea id="cv_summary" rows="3" style="width:100%; background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:10px; padding:12px; font-family:var(--font-body); color:var(--text-primary);">${escapeAttrCv(d.summary)}</textarea></div>
-        </div>
-
-        <div class="section-card" style="margin-bottom:18px;">
-          <div class="section-head"><h3>الخبرة العملية</h3><button class="btn-add" id="addExpBtn">${icon("plus", 13)} إضافة</button></div>
-          <div id="expList"></div>
-        </div>
-
-        <div class="section-card" style="margin-bottom:18px;">
-          <div class="section-head"><h3>المؤهل العلمي</h3><button class="btn-add" id="addEduBtn">${icon("plus", 13)} إضافة</button></div>
-          <div id="eduList"></div>
-        </div>
-
-        <div class="section-card" style="margin-bottom:18px;">
-          <div class="section-head"><h3>المهارات</h3></div>
-          <input type="text" id="cv_skill_input" placeholder="اكتب مهارة واضغط Enter" />
-          <div id="skillsList" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;"></div>
-        </div>
-
-        <div class="section-card" style="margin-bottom:18px;">
-          <div class="section-head"><h3>أقسام من ملف الإنجاز</h3></div>
-          <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;">حدد الأقسام اللي تبي عناوين مرفقاتها تنضاف للسيرة تلقائياً.</p>
-          <div id="poolCheckboxes"></div>
-        </div>
-
-        <div class="section-card">
-          <div class="section-head"><h3>القالب</h3></div>
-          <div class="btn-pill-choice" id="templateChoice">
-            <button type="button" data-tpl="modern" class="${d.template === "modern" ? "active positive" : ""}">عصري بسيط</button>
-            <button type="button" data-tpl="classic" class="${d.template === "classic" ? "active positive" : ""}">كلاسيكي احترافي</button>
-            <button type="button" data-tpl="bold" class="${d.template === "bold" ? "active positive" : ""}">جريء معاصر</button>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <div class="section-card" style="position:sticky; top:20px;">
-          <div class="section-head">
-            <h3>معاينة حية</h3>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn-add" id="saveCvBtn">${icon("check", 13)} حفظ</button>
-              <button class="btn-secondary" style="width:auto; padding:9px 14px;" id="downloadWordBtn">${icon("download", 14)} Word</button>
-              <button class="btn-secondary" style="width:auto; padding:9px 14px;" id="downloadPdfBtn">${icon("print", 14)} PDF</button>
-            </div>
-          </div>
-          <div id="cvPreviewWrap" style="border:1px solid var(--border-soft); border-radius:10px; overflow:auto; max-height:80vh; background:#fff;"></div>
-        </div>
-      </div>
+function renderCVEditor(){
+  const el = document.getElementById("contentArea");
+  el.innerHTML = `
+    <div class="page-head">
+      <button class="btn-back" onclick="loadHomeStats()">${icon("back",18)}<span>رجوع للرئيسية</span></button>
+      <h2>السيرة الذاتية</h2>
     </div>
-    <style>@media (max-width: 900px) { #cvGrid { grid-template-columns: 1fr !important; } }</style>
+    <div class="cv-editor-grid">
+      <div class="cv-form-col">
+        <label>الصورة الشخصية</label>
+        <input type="file" id="cv_photo_input" accept="image/*" onchange="uploadCvPhoto()">
+        <label>الاسم الكامل</label>
+        <input type="text" id="cv_full_name" value="${cvData.full_name}" oninput="cvData.full_name=this.value;updatePreview()">
+        <label>المسمى الوظيفي</label>
+        <input type="text" id="cv_title" value="${cvData.title}" oninput="cvData.title=this.value;updatePreview()">
+        <label>البريد الإلكتروني</label>
+        <input type="text" id="cv_email" value="${cvData.email}" oninput="cvData.email=this.value;updatePreview()">
+        <label>الجوال</label>
+        <input type="text" id="cv_phone" value="${cvData.phone}" oninput="cvData.phone=this.value;updatePreview()">
+        <label>نبذة عني</label>
+        <textarea id="cv_summary" rows="3" oninput="cvData.summary=this.value;updatePreview()">${cvData.summary}</textarea>
+
+        <div class="cv-list-editor">
+          <strong>الخبرات</strong>
+          <div id="expList"></div>
+          <button type="button" class="btn-secondary" onclick="addExp()">${icon("plus",14)}<span>إضافة خبرة</span></button>
+        </div>
+        <div class="cv-list-editor">
+          <strong>التعليم</strong>
+          <div id="eduList"></div>
+          <button type="button" class="btn-secondary" onclick="addEdu()">${icon("plus",14)}<span>إضافة مؤهل</span></button>
+        </div>
+        <div class="cv-list-editor">
+          <strong>المهارات</strong>
+          <input type="text" id="skillInput" placeholder="اكتب مهارة واضغط Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();addSkill(this.value);this.value='';}">
+          <div id="skillsTags" class="tags-row"></div>
+        </div>
+        <div class="cv-list-editor">
+          <strong>اللغات</strong>
+          <div id="langList"></div>
+          <button type="button" class="btn-secondary" onclick="addLang()">${icon("plus",14)}<span>إضافة لغة</span></button>
+        </div>
+        <div class="cv-list-editor">
+          <strong>أقسام من ملف الإنجاز</strong>
+          <div id="poolChecks">
+            ${cvPortfolioPool.map(p => `<label class="check-row"><input type="checkbox" class="pool-check" value="${p.id}" ${cvData.selected_sections.includes(p.id)?'checked':''} onchange="togglePoolSection('${p.id}',this.checked)"> ${p.title}</label>`).join("") || `<p class="muted">لا توجد أقسام.</p>`}
+          </div>
+        </div>
+        <div class="cv-list-editor">
+          <strong>القالب</strong>
+          <div class="template-pick-row">
+            <button type="button" class="pill ${cvData.template==='modern'?'active':''}" onclick="setTemplate('modern')">عصري</button>
+            <button type="button" class="pill ${cvData.template==='classic'?'active':''}" onclick="setTemplate('classic')">كلاسيكي</button>
+            <button type="button" class="pill ${cvData.template==='bold'?'active':''}" onclick="setTemplate('bold')">جريء</button>
+            <button type="button" class="pill ${cvData.template==='wave'?'active':''}" onclick="setTemplate('wave')">موجي</button>
+          </div>
+        </div>
+
+        <button class="btn-primary full" onclick="saveCv()">${icon("check",16)}<span>حفظ</span></button>
+        <div class="toolbar-row" style="margin-top:10px;">
+          <button class="btn-secondary" onclick="downloadCvPdf()">${icon("download",16)}<span>تنزيل PDF</span></button>
+          <button class="btn-secondary" onclick="downloadCvWord()">${icon("download",16)}<span>تنزيل Word</span></button>
+        </div>
+      </div>
+      <div class="cv-preview-col" id="cvPreviewCol"></div>
+    </div>
   `;
-
-  renderExpList(); renderEduList(); renderSkillsList(); renderPoolCheckboxes();
+  hydrateIcons(el);
+  renderExpList(); renderEduList(); renderSkillsTags(); renderLangList();
   updatePreview();
-
-  document.getElementById("cv_photo_input").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const preview = document.getElementById("cvPhotoPreview");
-    preview.innerHTML = '<span class="loading-spin" style="border-top-color:var(--navy);"></span>';
-    try {
-      const filePath = `cv/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
-      const { error: upErr } = await supabaseClient.storage.from("maharat-files").upload(filePath, file);
-      if (upErr) throw upErr;
-      const { data: pub } = await supabaseClient.storage.from("maharat-files").getPublicUrl(filePath);
-      cvData.photo_url = pub.publicUrl;
-      preview.innerHTML = `<img src="${cvData.photo_url}" style="width:100%; height:100%; object-fit:cover;" />`;
-      updatePreview();
-    } catch (err) {
-      preview.innerHTML = `<span style="color:var(--text-muted); font-size:11px;">فشل الرفع</span>`;
-    }
-  });
-  document.getElementById("cv_name").addEventListener("input", (e) => { cvData.full_name = e.target.value; updatePreview(); });
-  document.getElementById("cv_title").addEventListener("input", (e) => { cvData.job_title = e.target.value; updatePreview(); });
-  document.getElementById("cv_email").addEventListener("input", (e) => { cvData.email = e.target.value; updatePreview(); });
-  document.getElementById("cv_phone").addEventListener("input", (e) => { cvData.phone = e.target.value; updatePreview(); });
-  document.getElementById("cv_summary").addEventListener("input", (e) => { cvData.summary = e.target.value; updatePreview(); });
-
-  document.getElementById("addExpBtn").addEventListener("click", () => {
-    cvData.experience.push({ title: "", org: "", period: "", desc: "" });
-    renderExpList(); updatePreview();
-  });
-  document.getElementById("addEduBtn").addEventListener("click", () => {
-    cvData.education.push({ degree: "", institution: "", year: "" });
-    renderEduList(); updatePreview();
-  });
-
-  document.getElementById("cv_skill_input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && e.target.value.trim()) {
-      e.preventDefault();
-      cvData.skills.push(e.target.value.trim());
-      e.target.value = "";
-      renderSkillsList(); updatePreview();
-    }
-  });
-
-  document.querySelectorAll("#templateChoice button").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll("#templateChoice button").forEach((b) => b.classList.remove("active", "positive"));
-      btn.classList.add("active", "positive");
-      cvData.template = btn.dataset.tpl;
-      updatePreview();
-    });
-  });
-
-  document.getElementById("saveCvBtn").addEventListener("click", saveCv);
-  document.getElementById("downloadWordBtn").addEventListener("click", downloadCvWord);
-  document.getElementById("downloadPdfBtn").addEventListener("click", downloadCvPdf);
 }
 
-function escapeAttrCv(str) { return (str || "").toString().replace(/"/g, "&quot;"); }
-function escapeHtmlCv(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
-
-function renderExpList() {
+function renderExpList(){
   const holder = document.getElementById("expList");
-  if (cvData.experience.length === 0) { holder.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه خبرات مضافة</div>`; return; }
-  holder.innerHTML = cvData.experience.map((exp, i) => `
-    <div style="border:1px solid var(--border-soft); border-radius:10px; padding:12px; margin-bottom:10px;">
-      <div style="display:flex; gap:8px; margin-bottom:8px;"><input type="text" placeholder="المسمى الوظيفي" value="${escapeAttrCv(exp.title)}" data-i="${i}" data-f="title" class="exp-field" /><button class="icon-btn danger" onclick="removeExp(${i})">${icon("trash", 14)}</button></div>
-      <input type="text" placeholder="جهة العمل" value="${escapeAttrCv(exp.org)}" data-i="${i}" data-f="org" class="exp-field" style="margin-bottom:8px;" />
-      <input type="text" placeholder="الفترة (مثال: 2020 - الآن)" value="${escapeAttrCv(exp.period)}" data-i="${i}" data-f="period" class="exp-field" style="margin-bottom:8px;" />
-      <input type="text" placeholder="وصف مختصر" value="${escapeAttrCv(exp.desc)}" data-i="${i}" data-f="desc" class="exp-field" />
+  holder.innerHTML = cvData.experience.map((e,i)=>`
+    <div class="cv-sub-item">
+      <input type="text" placeholder="المسمى" value="${e.title||''}" oninput="cvData.experience[${i}].title=this.value;updatePreview()">
+      <input type="text" placeholder="الجهة" value="${e.org||''}" oninput="cvData.experience[${i}].org=this.value;updatePreview()">
+      <input type="text" placeholder="الفترة" value="${e.period||''}" oninput="cvData.experience[${i}].period=this.value;updatePreview()">
+      <textarea placeholder="الوصف" rows="2" oninput="cvData.experience[${i}].desc=this.value;updatePreview()">${e.desc||''}</textarea>
+      <button type="button" class="mini-btn danger" onclick="cvData.experience.splice(${i},1);renderExpList();updatePreview()">${icon("trash",14)}</button>
     </div>`).join("");
-  holder.querySelectorAll(".exp-field").forEach((inp) => {
-    inp.addEventListener("input", (e) => { cvData.experience[e.target.dataset.i][e.target.dataset.f] = e.target.value; updatePreview(); });
-  });
+  hydrateIcons(holder);
 }
-function removeExp(i) { cvData.experience.splice(i, 1); renderExpList(); updatePreview(); }
+function addExp(){ cvData.experience.push({title:"",org:"",period:"",desc:""}); renderExpList(); }
 
-function renderEduList() {
+function renderEduList(){
   const holder = document.getElementById("eduList");
-  if (cvData.education.length === 0) { holder.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه مؤهلات مضافة</div>`; return; }
-  holder.innerHTML = cvData.education.map((ed, i) => `
-    <div style="border:1px solid var(--border-soft); border-radius:10px; padding:12px; margin-bottom:10px;">
-      <div style="display:flex; gap:8px; margin-bottom:8px;"><input type="text" placeholder="الدرجة العلمية" value="${escapeAttrCv(ed.degree)}" data-i="${i}" data-f="degree" class="edu-field" /><button class="icon-btn danger" onclick="removeEdu(${i})">${icon("trash", 14)}</button></div>
-      <input type="text" placeholder="الجهة/الجامعة" value="${escapeAttrCv(ed.institution)}" data-i="${i}" data-f="institution" class="edu-field" style="margin-bottom:8px;" />
-      <input type="text" placeholder="سنة التخرج" value="${escapeAttrCv(ed.year)}" data-i="${i}" data-f="year" class="edu-field" />
+  holder.innerHTML = cvData.education.map((e,i)=>`
+    <div class="cv-sub-item">
+      <input type="text" placeholder="المؤهل" value="${e.degree||''}" oninput="cvData.education[${i}].degree=this.value;updatePreview()">
+      <input type="text" placeholder="الجهة" value="${e.institution||''}" oninput="cvData.education[${i}].institution=this.value;updatePreview()">
+      <input type="text" placeholder="السنة" value="${e.year||''}" oninput="cvData.education[${i}].year=this.value;updatePreview()">
+      <button type="button" class="mini-btn danger" onclick="cvData.education.splice(${i},1);renderEduList();updatePreview()">${icon("trash",14)}</button>
     </div>`).join("");
-  holder.querySelectorAll(".edu-field").forEach((inp) => {
-    inp.addEventListener("input", (e) => { cvData.education[e.target.dataset.i][e.target.dataset.f] = e.target.value; updatePreview(); });
-  });
+  hydrateIcons(holder);
 }
-function removeEdu(i) { cvData.education.splice(i, 1); renderEduList(); updatePreview(); }
+function addEdu(){ cvData.education.push({degree:"",institution:"",year:""}); renderEduList(); }
 
-function renderSkillsList() {
-  const holder = document.getElementById("skillsList");
-  holder.innerHTML = cvData.skills.map((s, i) => `<span class="sub-badge" style="display:flex; align-items:center; gap:6px; padding:6px 12px;">${escapeHtmlCv(s)} <span style="cursor:pointer;" onclick="removeSkill(${i})">${icon("close", 11)}</span></span>`).join("");
+function renderSkillsTags(){
+  const holder = document.getElementById("skillsTags");
+  holder.innerHTML = cvData.skills.map((s,i)=>`<span class="tag">${s} <button type="button" onclick="cvData.skills.splice(${i},1);renderSkillsTags();updatePreview()">×</button></span>`).join("");
 }
-function removeSkill(i) { cvData.skills.splice(i, 1); renderSkillsList(); updatePreview(); }
-
-function renderPoolCheckboxes() {
-  const holder = document.getElementById("poolCheckboxes");
-  if (cvSectionsPool.length === 0) { holder.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه أقسام بملف الإنجاز بعد</div>`; return; }
-  holder.innerHTML = cvSectionsPool.map((s) => `
-    <label style="display:flex; align-items:center; gap:8px; padding:8px 0; cursor:pointer;">
-      <input type="checkbox" class="pool-check" value="${s.id}" ${cvData.selected_sections.includes(s.id) ? "checked" : ""} />
-      ${escapeHtmlCv(s.title)} <span class="sub-badge">${s.items.length} عنصر</span>
-    </label>`).join("");
-  holder.querySelectorAll(".pool-check").forEach((chk) => {
-    chk.addEventListener("change", () => {
-      cvData.selected_sections = Array.from(document.querySelectorAll(".pool-check:checked")).map((c) => c.value);
-      updatePreview();
-    });
-  });
+function addSkill(val){
+  const v = (val||"").trim();
+  if (!v) return;
+  cvData.skills.push(v);
+  renderSkillsTags(); updatePreview();
 }
 
-async function saveCv() {
-  const btn = document.getElementById("saveCvBtn");
-  btn.disabled = true; btn.innerHTML = '<span class="loading-spin"></span>';
+function renderLangList(){
+  const holder = document.getElementById("langList");
+  holder.innerHTML = cvData.languages.map((l,i)=>`
+    <div class="cv-sub-item">
+      <input type="text" placeholder="اللغة" value="${l.name||''}" oninput="cvData.languages[${i}].name=this.value;updatePreview()">
+      <select onchange="cvData.languages[${i}].level=this.value;updatePreview()">
+        ${["ممتاز","جيد جداً","جيد","متوسط"].map(lv=>`<option value="${lv}" ${l.level===lv?'selected':''}>${lv}</option>`).join("")}
+      </select>
+      <button type="button" class="mini-btn danger" onclick="cvData.languages.splice(${i},1);renderLangList();updatePreview()">${icon("trash",14)}</button>
+    </div>`).join("");
+  hydrateIcons(holder);
+}
+function addLang(){ cvData.languages.push({name:"", level:"جيد"}); renderLangList(); }
+
+function togglePoolSection(id, checked){
+  if (checked) { if (!cvData.selected_sections.includes(id)) cvData.selected_sections.push(id); }
+  else { cvData.selected_sections = cvData.selected_sections.filter(x => x !== id); }
+  updatePreview();
+}
+function setTemplate(t){
+  cvData.template = t;
+  document.querySelectorAll(".template-pick-row .pill").forEach(p=>p.classList.remove("active"));
+  event.target.classList.add("active");
+  updatePreview();
+}
+
+async function uploadCvPhoto(){
+  const file = document.getElementById("cv_photo_input").files[0];
+  if (!file) return;
+  const path = `cv/${Date.now()}_${file.name}`;
+  const { error } = await supabaseClient.storage.from("maharat-files").upload(path, file);
+  if (error) { alert("فشل رفع الصورة: " + error.message); return; }
+  const { data: pub } = supabaseClient.storage.from("maharat-files").getPublicUrl(path);
+  cvData.photo_url = pub.publicUrl;
+  updatePreview();
+}
+
+async function saveCv(){
   const payload = {
-    full_name: cvData.full_name, job_title: cvData.job_title, email: cvData.email, phone: cvData.phone,
-    summary: cvData.summary, experience: cvData.experience, education: cvData.education, skills: cvData.skills,
-    selected_sections: cvData.selected_sections, template: cvData.template, photo_url: cvData.photo_url || null,
-    updated_at: new Date().toISOString(),
+    full_name: cvData.full_name, title: cvData.title, email: cvData.email, phone: cvData.phone,
+    summary: cvData.summary, photo_url: cvData.photo_url, experience: cvData.experience,
+    education: cvData.education, skills: cvData.skills, languages: cvData.languages,
+    selected_sections: cvData.selected_sections, template: cvData.template,
+    teacher_id: currentProfile?.id || null
   };
-  let error;
   if (cvData.id) {
-    ({ error } = await supabaseClient.from("teacher_cv").update(payload).eq("id", cvData.id));
+    await supabaseClient.from("teacher_cv").update(payload).eq("id", cvData.id);
   } else {
-    const { data, error: insErr } = await supabaseClient.from("teacher_cv").insert(payload).select().single();
-    error = insErr;
+    const { data } = await supabaseClient.from("teacher_cv").insert(payload).select().single();
     if (data) cvData.id = data.id;
   }
-  btn.disabled = false;
-  if (error) { btn.innerHTML = icon("check", 13) + " حفظ"; hydrateIcons(btn); alert("تعذر الحفظ: " + error.message); return; }
-  btn.innerHTML = icon("check", 13) + " تم الحفظ"; hydrateIcons(btn);
-  setTimeout(() => { btn.innerHTML = icon("check", 13) + " حفظ"; hydrateIcons(btn); }, 1800);
+  alert("تم حفظ السيرة الذاتية");
 }
 
-// ============ توليد محتوى السيرة (مشترك بين المعاينة والتنزيل) ============
-
-function buildCvBodyHtml() {
-  const d = cvData;
-  const pool = cvSectionsPool.filter((s) => d.selected_sections.includes(s.id));
-
-  const expHtml = d.experience.filter((e) => e.title).map((e) => `
-    <div style="margin-bottom:13px;">
-      <div style="font-weight:700; font-size:12.5px;">${escapeHtmlCv(e.title)} ${e.org ? "— " + escapeHtmlCv(e.org) : ""}</div>
-      <div style="font-size:10px; color:#8a8a8a; margin-bottom:3px;">${escapeHtmlCv(e.period)}</div>
-      <div style="font-size:11px; color:#3a3a3a; line-height:1.7;">${escapeHtmlCv(e.desc)}</div>
-    </div>`).join("");
-
-  const eduHtml = d.education.filter((e) => e.degree).map((e) => `
-    <div style="margin-bottom:9px;">
-      <div style="font-weight:700; font-size:12.5px;">${escapeHtmlCv(e.degree)}</div>
-      <div style="font-size:11px; color:#555;">${escapeHtmlCv(e.institution)} ${e.year ? "· " + escapeHtmlCv(e.year) : ""}</div>
-    </div>`).join("");
-
-  const poolHtml = pool.map((s) => `
-    <div style="margin-bottom:13px;">
-      <div style="font-weight:700; font-size:12.5px; margin-bottom:5px;">${escapeHtmlCv(s.title)}</div>
-      <ul style="margin:0; padding-inline-start:16px; font-size:11px; color:#3a3a3a; line-height:1.85;">
-        ${s.items.map((t) => `<li>${escapeHtmlCv(t)}</li>`).join("")}
-      </ul>
-    </div>`).join("");
-
-  return { expHtml, eduHtml, poolHtml };
-}
-
-const CV_ACCENT = "#0F2542";
-const CV_GOLD = "#B8862E";
-
-function cvPhotoHtml(size, borderColor) {
-  const d = cvData;
-  if (d.photo_url) {
-    return `<img src="${d.photo_url}" style="width:${size}px; height:${size}px; border-radius:50%; object-fit:cover; border:3px solid ${borderColor}; flex-shrink:0;" />`;
+function cvPhotoHtml(size, borderColor){
+  if (cvData.photo_url) {
+    return `<img src="${cvData.photo_url}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:3px solid ${borderColor};">`;
   }
-  return `<div style="width:${size}px; height:${size}px; border-radius:50%; background:#e8ecf2; border:3px solid ${borderColor}; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:${Math.round(size * 0.4)}px; font-weight:800; color:${CV_ACCENT};">${escapeHtmlCv((d.full_name || "؟").charAt(0))}</div>`;
+  const letter = (cvData.full_name||"ف").trim()[0] || "ف";
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:#0F2542;color:#fff;display:flex;align-items:center;justify-content:center;font-size:${size*0.4}px;font-weight:700;border:3px solid ${borderColor};">${letter}</div>`;
+}
+function sectionTitleHtml(text, color){
+  return `<div style="display:flex;align-items:center;gap:8px;margin:14px 0 8px;"><span style="width:4px;height:18px;background:${color||'#B8862E'};display:inline-block;border-radius:2px;"></span><h3 style="margin:0;font-size:15px;">${text}</h3></div>`;
+}
+function poolSectionsHtml(){
+  const selected = cvPortfolioPool.filter(p => cvData.selected_sections.includes(p.id));
+  if (!selected.length) return "";
+  return selected.map(p => `<div style="margin-bottom:6px;font-size:13px;">• ${p.title}</div>`).join("");
+}
+function expHtml(){
+  return cvData.experience.map(e => `
+    <div style="margin-bottom:10px;">
+      <div style="font-weight:700;font-size:13px;">${e.title||''} ${e.org?('— '+e.org):''}</div>
+      <div style="font-size:11px;color:#888;">${e.period||''}</div>
+      <div style="font-size:12px;">${e.desc||''}</div>
+    </div>`).join("") || `<p style="font-size:12px;color:#999;">لا يوجد</p>`;
+}
+function eduHtml(){
+  return cvData.education.map(e => `
+    <div style="margin-bottom:8px;">
+      <div style="font-weight:700;font-size:13px;">${e.degree||''}</div>
+      <div style="font-size:11px;color:#888;">${e.institution||''} ${e.year?('- '+e.year):''}</div>
+    </div>`).join("") || `<p style="font-size:12px;color:#999;">لا يوجد</p>`;
+}
+function skillsHtml(light){
+  const color = light ? "#fff" : "#0F2542";
+  const bg = light ? "rgba(255,255,255,0.15)" : "#F0F1F6";
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px;">${cvData.skills.map(s=>`<span style="background:${bg};color:${color};padding:4px 10px;border-radius:20px;font-size:11px;">${s}</span>`).join("")}</div>`;
+}
+function langsHtml(light){
+  const color = light ? "#fff" : "#0F2542";
+  return cvData.languages.map(l => `
+    <div style="margin-bottom:6px;font-size:12px;color:${color};">
+      <div style="display:flex;justify-content:space-between;"><span>${l.name}</span><span style="opacity:.8;">${l.level}</span></div>
+    </div>`).join("");
 }
 
-function sectionTitleHtml(text, color) {
-  return `<div style="display:flex; align-items:center; gap:8px; margin-bottom:11px; margin-top:4px;"><span style="width:16px; height:3px; background:${color || CV_GOLD}; display:inline-block;"></span><span style="font-weight:800; font-size:13px; letter-spacing:0.3px;">${text}</span></div>`;
+function pageOuter(innerHtml, frameColor){
+  return `
+  <div style="width:210mm;min-height:297mm;background:#fff;border:2px solid ${frameColor};box-sizing:border-box;position:relative;">
+    <div style="position:absolute;inset:6px;border:1px solid #ddd;box-sizing:border-box;"></div>
+    <div style="position:relative;padding:14mm 15mm;box-sizing:border-box;min-height:297mm;">
+      ${innerHtml}
+    </div>
+  </div>`;
 }
 
-// A4 = 210mm × 297mm. الصفحة مؤطرة بحد خارجي وهامش داخلي ثابت يناسب الطباعة.
-function renderTemplateHtml(template) {
-  const d = cvData;
-  const { expHtml, eduHtml, poolHtml } = buildCvBodyHtml();
-  const contact = [d.email, d.phone].filter(Boolean).join("   ·   ");
-
-  const pageOuter = (innerHtml, frameColor) => `
-    <div style="width:210mm; min-height:297mm; margin:0 auto; background:#fff; box-sizing:border-box; border:2px solid ${frameColor || CV_ACCENT}; padding:6mm; font-family:'Tajawal',Arial,sans-serif; direction:rtl; color:#222;">
-      <div style="width:100%; height:100%; border:1px solid #d9dde5; box-sizing:border-box; padding:14mm 15mm;">
-        ${innerHtml}
-      </div>
-    </div>`;
-
+function renderTemplateHtml(template){
   if (template === "classic") {
-    const inner = `
-      <div style="display:flex; gap:18px; min-height:100%;">
-        <div style="width:33%; background:${CV_ACCENT}; color:#fff; padding:22px 16px; border-radius:6px;">
-          <div style="display:flex; justify-content:center; margin-bottom:14px;">${cvPhotoHtml(84, "#fff")}</div>
-          <div style="text-align:center; font-size:17px; font-weight:800; margin-bottom:2px;">${escapeHtmlCv(d.full_name)}</div>
-          <div style="text-align:center; font-size:11px; color:${CV_GOLD}; margin-bottom:18px;">${escapeHtmlCv(d.job_title)}</div>
-          <div style="border-top:1px solid rgba(255,255,255,0.25); padding-top:12px; font-size:10.5px; line-height:2;">
-            ${d.email ? `<div>${escapeHtmlCv(d.email)}</div>` : ""}${d.phone ? `<div>${escapeHtmlCv(d.phone)}</div>` : ""}
-          </div>
-          ${d.skills.length ? `<div style="border-top:1px solid rgba(255,255,255,0.25); margin-top:14px; padding-top:12px;"><div style="font-weight:700; font-size:11px; margin-bottom:8px;">المهارات</div>${d.skills.map((s) => `<div style="font-size:10.5px; padding:3px 0;">• ${escapeHtmlCv(s)}</div>`).join("")}</div>` : ""}
+    return pageOuter(`
+      <div style="display:flex;gap:24px;">
+        <div style="width:35%;background:#0F2542;color:#fff;padding:18px;border-radius:10px;">
+          <div style="text-align:center;margin-bottom:14px;">${cvPhotoHtml(100,'#B8862E')}</div>
+          <h2 style="text-align:center;font-size:18px;margin:0 0 4px;">${cvData.full_name}</h2>
+          <p style="text-align:center;color:#B8862E;font-size:12px;margin:0 0 14px;">${cvData.title}</p>
+          ${sectionTitleHtml("تفاصيل التواصل","#B8862E")}
+          <p style="font-size:11px;">${cvData.email}</p>
+          <p style="font-size:11px;">${cvData.phone}</p>
+          ${sectionTitleHtml("المهارات","#B8862E")}
+          ${skillsHtml(true)}
+          ${cvData.languages.length ? sectionTitleHtml("اللغات","#B8862E") + langsHtml(true) : ""}
         </div>
-        <div style="width:67%; padding-top:4px;">
-          ${d.summary ? `<div style="font-size:11.5px; line-height:1.85; color:#444; margin-bottom:16px;">${escapeHtmlCv(d.summary)}</div>` : ""}
-          ${expHtml ? sectionTitleHtml("الخبرة العملية") + expHtml : ""}
-          ${eduHtml ? sectionTitleHtml("المؤهل العلمي") + eduHtml : ""}
-          ${poolHtml}
-        </div>
-      </div>`;
-    return pageOuter(inner);
-  }
-
-  if (template === "bold") {
-    const inner = `
-      <div style="background:${CV_ACCENT}; color:#fff; padding:22px 24px; border-radius:6px; display:flex; align-items:center; gap:18px; margin-bottom:20px;">
-        ${cvPhotoHtml(76, CV_GOLD)}
-        <div>
-          <div style="font-size:21px; font-weight:800;">${escapeHtmlCv(d.full_name)}</div>
-          <div style="font-size:12px; color:${CV_GOLD}; margin-top:3px;">${escapeHtmlCv(d.job_title)}</div>
-          ${contact ? `<div style="font-size:10.5px; margin-top:8px; opacity:0.85;">${escapeHtmlCv(contact)}</div>` : ""}
+        <div style="width:65%;">
+          ${sectionTitleHtml("نبذة عني")}
+          <p style="font-size:12px;">${cvData.summary}</p>
+          ${sectionTitleHtml("الخبرات")}${expHtml()}
+          ${sectionTitleHtml("التعليم")}${eduHtml()}
+          ${cvData.selected_sections.length ? sectionTitleHtml("من ملف الإنجاز") + poolSectionsHtml() : ""}
         </div>
       </div>
-      ${d.summary ? `<div style="font-size:11.5px; line-height:1.85; color:#444; margin-bottom:18px;">${escapeHtmlCv(d.summary)}</div>` : ""}
-      ${d.skills.length ? `<div style="margin-bottom:18px;">${d.skills.map((s) => `<span style="display:inline-block; padding:5px 13px; margin:3px; border-radius:999px; font-size:10.5px; background:${CV_ACCENT}; color:#fff;">${escapeHtmlCv(s)}</span>`).join("")}</div>` : ""}
-      ${expHtml ? sectionTitleHtml("الخبرة العملية") + expHtml : ""}
-      ${eduHtml ? sectionTitleHtml("المؤهل العلمي") + eduHtml : ""}
-      ${poolHtml}`;
-    return pageOuter(inner, CV_GOLD);
+    `, "#0F2542");
   }
-
-  // modern (افتراضي)
-  const inner = `
-    <div style="display:flex; align-items:center; gap:16px; border-bottom:3px solid ${CV_ACCENT}; padding-bottom:16px; margin-bottom:18px;">
-      ${cvPhotoHtml(72, CV_ACCENT)}
-      <div>
-        <div style="font-size:20px; font-weight:800; color:${CV_ACCENT};">${escapeHtmlCv(d.full_name)}</div>
-        <div style="font-size:12px; color:${CV_GOLD}; margin-top:2px;">${escapeHtmlCv(d.job_title)}</div>
-        ${contact ? `<div style="font-size:10.5px; color:#888; margin-top:6px;">${escapeHtmlCv(contact)}</div>` : ""}
+  if (template === "bold") {
+    return pageOuter(`
+      <div style="background:#0F2542;color:#fff;padding:20px;border-radius:12px;display:flex;align-items:center;gap:18px;margin-bottom:18px;">
+        ${cvPhotoHtml(90,'#B8862E')}
+        <div><h2 style="margin:0;font-size:20px;">${cvData.full_name}</h2><p style="color:#D9A94A;margin:4px 0 0;">${cvData.title}</p></div>
+      </div>
+      <div style="display:flex;gap:20px;font-size:12px;color:#555;margin-bottom:10px;"><span>${cvData.email}</span><span>${cvData.phone}</span></div>
+      ${sectionTitleHtml("نبذة عني")}<p style="font-size:12px;">${cvData.summary}</p>
+      <div style="display:flex;gap:24px;">
+        <div style="width:60%;">
+          ${sectionTitleHtml("الخبرات")}${expHtml()}
+          ${sectionTitleHtml("التعليم")}${eduHtml()}
+        </div>
+        <div style="width:40%;">
+          ${sectionTitleHtml("المهارات")}${skillsHtml(false)}
+          ${cvData.languages.length ? sectionTitleHtml("اللغات") + langsHtml(false) : ""}
+          ${cvData.selected_sections.length ? sectionTitleHtml("من ملف الإنجاز") + poolSectionsHtml() : ""}
+        </div>
+      </div>
+    `, "#B8862E");
+  }
+  if (template === "wave") {
+    return pageOuter(`
+      <div style="display:flex;gap:0;margin:-14mm -15mm;min-height:297mm;">
+        <div style="width:36%;background:#1B2430;color:#fff;padding:28px 20px;position:relative;">
+          <div style="text-align:center;margin-bottom:16px;">${cvPhotoHtml(110,'#B8862E')}</div>
+          <h2 style="text-align:center;font-size:17px;margin:0 0 2px;">${cvData.full_name}</h2>
+          <p style="text-align:center;color:#B8862E;font-size:12px;margin:0 0 20px;">${cvData.title}</p>
+          <div style="background:#fff;color:#1B2430;border-radius:0 40px 40px 0;padding:14px 16px;margin:0 -20px 18px 0;">
+            <strong style="font-size:13px;">التعليم</strong>
+            <div style="margin-top:8px;">${eduHtml()}</div>
+          </div>
+          <div style="background:#25303F;border-radius:0 40px 40px 0;padding:14px 16px;margin:0 -20px 18px 0;">
+            <strong style="font-size:13px;color:#B8862E;">المهارات</strong>
+            <div style="margin-top:8px;">${skillsHtml(true)}</div>
+          </div>
+          ${cvData.languages.length ? `
+          <div style="background:#fff;color:#1B2430;border-radius:0 40px 40px 0;padding:14px 16px;margin:0 -20px 18px 0;">
+            <strong style="font-size:13px;">اللغات</strong>
+            <div style="margin-top:8px;">${langsHtml(false)}</div>
+          </div>` : ""}
+        </div>
+        <div style="width:64%;padding:28px 26px;">
+          ${sectionTitleHtml("نبذة عني")}<p style="font-size:12px;">${cvData.summary}</p>
+          ${sectionTitleHtml("تفاصيل التواصل")}<p style="font-size:11px;">${cvData.email} — ${cvData.phone}</p>
+          ${sectionTitleHtml("خبرات العمل")}${expHtml()}
+          ${cvData.selected_sections.length ? sectionTitleHtml("من ملف الإنجاز") + poolSectionsHtml() : ""}
+        </div>
+      </div>
+    `, "#1B2430");
+  }
+  // modern (default)
+  return pageOuter(`
+    <div style="display:flex;align-items:center;gap:18px;border-bottom:3px solid #0F2542;padding-bottom:16px;margin-bottom:18px;">
+      ${cvPhotoHtml(90,'#B8862E')}
+      <div><h2 style="margin:0;font-size:20px;color:#0F2542;">${cvData.full_name}</h2><p style="color:#B8862E;margin:4px 0 0;">${cvData.title}</p>
+      <p style="font-size:12px;color:#666;margin:6px 0 0;">${cvData.email} · ${cvData.phone}</p></div>
+    </div>
+    ${sectionTitleHtml("نبذة عني")}<p style="font-size:12px;">${cvData.summary}</p>
+    <div style="display:flex;gap:24px;">
+      <div style="width:60%;">
+        ${sectionTitleHtml("الخبرات")}${expHtml()}
+        ${sectionTitleHtml("التعليم")}${eduHtml()}
+      </div>
+      <div style="width:40%;">
+        ${sectionTitleHtml("المهارات")}${skillsHtml(false)}
+        ${cvData.languages.length ? sectionTitleHtml("اللغات") + langsHtml(false) : ""}
+        ${cvData.selected_sections.length ? sectionTitleHtml("من ملف الإنجاز") + poolSectionsHtml() : ""}
       </div>
     </div>
-    ${d.summary ? `<div style="font-size:11.5px; line-height:1.85; color:#444; margin-bottom:18px;">${escapeHtmlCv(d.summary)}</div>` : ""}
-    ${d.skills.length ? `<div style="margin-bottom:18px;">${d.skills.map((s) => `<span style="display:inline-block; padding:5px 13px; margin:3px; border-radius:999px; font-size:10.5px; background:#f0f1f6; border:1px solid #dde1ea;">${escapeHtmlCv(s)}</span>`).join("")}</div>` : ""}
-    ${expHtml ? sectionTitleHtml("الخبرة العملية", CV_ACCENT) + expHtml : ""}
-    ${eduHtml ? sectionTitleHtml("المؤهل العلمي", CV_ACCENT) + eduHtml : ""}
-    ${poolHtml}`;
-  return pageOuter(inner);
+  `, "#0F2542");
 }
 
-function updatePreview() {
-  const wrap = document.getElementById("cvPreviewWrap");
-  wrap.innerHTML = `<div style="padding:16px; background:#e9ebf0; display:flex; justify-content:center;">${renderTemplateHtml(cvData.template)}</div>`;
+function updatePreview(){
+  const holder = document.getElementById("cvPreviewCol");
+  if (!holder) return;
+  holder.innerHTML = `<div style="background:#e9ebf0;padding:20px;display:flex;justify-content:center;overflow:auto;">
+    <div id="cvPrintable">${renderTemplateHtml(cvData.template)}</div>
+  </div>`;
 }
 
-// ============ التنزيل ============
-
-function downloadCvPdf() {
-  const html = renderTemplateHtml(cvData.template);
-  const win = window.open("", "_blank");
-  win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>السيرة الذاتية - ${escapeHtmlCv(cvData.full_name)}</title><style>@page{size:A4; margin:0;} body{margin:0;}</style></head><body>${html}</body></html>`);
-  win.document.close();
-  setTimeout(() => win.print(), 400);
+function downloadCvPdf(){
+  const w = window.open("", "_blank");
+  w.document.write(`<html dir="rtl"><head><title>CV</title><style>@page{size:A4;margin:0;}body{margin:0;font-family:Tajawal,Arial;}</style></head><body>${renderTemplateHtml(cvData.template)}</body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(), 500);
 }
 
-function downloadCvWord() {
-  const html = renderTemplateHtml(cvData.template);
-  const wordDoc = `
-    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-    <head><meta charset="UTF-8"><title>السيرة الذاتية</title></head>
-    <body dir="rtl">${html}</body></html>`;
-  const blob = new Blob(["\ufeff", wordDoc], { type: "application/msword" });
+function downloadCvWord(){
+  const html = `
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head><meta charset="utf-8"><title>CV</title></head>
+    <body dir="rtl">${renderTemplateHtml(cvData.template)}</body></html>`;
+  const blob = new Blob(['﻿', html], { type: "application/msword" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `السيرة الذاتية - ${cvData.full_name || "معلم"}.doc`;
-  document.body.appendChild(link);
+  link.download = `السيرة_الذاتية_${cvData.full_name || "cv"}.doc`;
   link.click();
-  document.body.removeChild(link);
 }

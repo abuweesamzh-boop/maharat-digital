@@ -1,303 +1,322 @@
-const BUCKET_NAME = "maharat-files";
-const FOLDER_COLORS = ["#0F2542", "#B8862E", "#3C6E5A", "#7A4B8A", "#1F6F8B", "#8A4B3C", "#4B6B8A", "#6B4B8A"];
-let currentModule = null;
-let navStack = [];
-const MODULE_LABELS = { portfolio: { page: "ملف إنجاز المعلم", icon: "folder" }, external: { page: "مهارات رقمية - الصفوف", icon: "rocket" } };
-function renderExternalLinksSection() { renderModule("external"); }
-function renderPortfolioSection() { renderModule("portfolio"); }
-function colorFor(i) { return FOLDER_COLORS[i % FOLDER_COLORS.length]; }
-function escapeHtml(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
-function escapeAttr(str) { return (str || "").replace(/'/g, "&#39;"); }
-function currentParentId() { return navStack.length ? navStack[navStack.length - 1].id : null; }
+const MODULE_LABELS = {
+  portfolio: { page: "ملف إنجاز المعلم", icon: "folder" },
+  external:  { page: "مهارات رقمية - الصفوف", icon: "rocket" }
+};
+const FOLDER_COLORS = ["#0F2542","#B8862E","#1F8A5C","#6B4EA6","#C1443B","#1B7F9E","#8A5A1F","#3D5A80"];
 
-async function renderModule(moduleName) {
-  currentModule = moduleName; navStack = [];
-  document.getElementById("pageTitle").textContent = MODULE_LABELS[moduleName].page;
-  await renderFolderView();
-}
-function goToCrumb(index) { navStack = navStack.slice(0, index + 1); renderFolderView(); }
-function goToModuleRoot() { navStack = []; renderFolderView(); }
+let contentState = { module: "portfolio", currentSectionId: null, path: [] };
 
-async function renderFolderView() {
-  const parentId = currentParentId();
-  const contentArea = document.getElementById("contentArea");
-  const currentTitle = navStack.length ? navStack[navStack.length - 1].title : MODULE_LABELS[currentModule].page;
-  document.getElementById("pageTitle").textContent = currentTitle;
+function renderPortfolioSection(){ renderModule("portfolio"); }
+function renderExternalLinksSection(){ renderModule("external"); }
 
-  const breadcrumbHtml = `
-    <div class="breadcrumb-nav">
-      <span class="crumb ${navStack.length === 0 ? "current" : ""}" onclick="goToModuleRoot()">${MODULE_LABELS[currentModule].page}</span>
-      ${navStack.map((n, i) => `<span>/</span><span class="crumb ${i === navStack.length - 1 ? "current" : ""}" onclick="goToCrumb(${i})">${escapeHtml(n.title)}</span>`).join("")}
-    </div>`;
-
-  contentArea.innerHTML = `
-    ${parentId ? `<button class="btn-back no-print" onclick="${navStack.length > 1 ? `goToCrumb(${navStack.length - 2})` : "goToModuleRoot()"}">${icon("back", 15)} رجوع</button>` : ""}
-    ${breadcrumbHtml}
-    ${!parentId ? `<div class="section-card" style="margin-bottom:18px;"><div class="section-head"><h3>${icon("chart")} لوحة إحصائيات المرفقات</h3></div><div id="dashboardStatsHolder" class="stat-grid"><div class="empty-state">جاري الحساب...</div></div></div>` : ""}
-    <div class="section-card" style="margin-bottom:18px;">
-      <div class="section-head">
-        <h3>الأقسام الفرعية</h3>
-        <div style="display:flex; gap:10px;">
-          <button class="btn-add" id="addFolderBtn">${icon("plus", 14)} إضافة قسم</button>
-          ${parentId ? `<button class="btn-add" id="addItemHereBtn">${icon("upload", 14)} إضافة مرفق هنا</button>` : ""}
-        </div>
-      </div>
-      <div id="foldersHolder"><div class="empty-state">جاري التحميل...</div></div>
-    </div>
-    ${parentId ? `<div class="section-card"><div class="section-head"><h3>المرفقات</h3></div><div id="itemsHolder"><div class="empty-state">جاري التحميل...</div></div></div>` : ""}
-  `;
-
-  document.getElementById("addFolderBtn").addEventListener("click", () => openSectionModal(parentId));
-  if (parentId) document.getElementById("addItemHereBtn").addEventListener("click", () => openAddItemModal(parentId, currentTitle));
-
-  await loadSubFolders(parentId);
-  if (parentId) await loadItems(parentId);
-  if (!parentId) await loadDashboardStats();
+function renderModule(moduleName){
+  contentState = { module: moduleName, currentSectionId: null, path: [] };
+  renderFolderView();
 }
 
-async function getAllDescendantSectionIds(rootId) {
-  let ids = []; let frontier = [rootId];
-  while (frontier.length > 0) {
-    const { data: children } = await supabaseClient.from("content_sections").select("id").in("parent_id", frontier);
-    const childIds = (children || []).map((c) => c.id);
-    ids = ids.concat(childIds); frontier = childIds;
+async function loadDashboardStats(moduleName){
+  const { data: allSections } = await supabaseClient.from("content_sections").select("id").eq("module", moduleName);
+  const { data: allItems } = await supabaseClient.from("content_items").select("id, section_id").in("section_id", (allSections||[]).map(s=>s.id).length ? (allSections||[]).map(s=>s.id) : ["00000000-0000-0000-0000-000000000000"]);
+  return { folders: (allSections||[]).length, items: (allItems||[]).length };
+}
+
+async function getAllDescendantSectionIds(rootId, moduleName){
+  const { data: all } = await supabaseClient.from("content_sections").select("id, parent_id").eq("module", moduleName);
+  const ids = [rootId];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    (all||[]).forEach(s => {
+      if (ids.includes(s.parent_id) && !ids.includes(s.id)) { ids.push(s.id); changed = true; }
+    });
   }
   return ids;
 }
 
-async function loadDashboardStats() {
-  const holder = document.getElementById("dashboardStatsHolder");
-  const { data: roots, error } = await supabaseClient.from("content_sections").select("*").eq("module", currentModule).is("parent_id", null).order("created_at", { ascending: true });
-  if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
-  if (!roots || roots.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه أقسام بعد لعرض الإحصائيات</div>`; return; }
-  const counts = await Promise.all(roots.map(async (r) => {
-    const descendants = await getAllDescendantSectionIds(r.id);
-    const allIds = [r.id, ...descendants];
-    const { count } = await supabaseClient.from("content_items").select("id", { count: "exact", head: true }).in("section_id", allIds);
-    return count ?? 0;
-  }));
-  const total = counts.reduce((a, b) => a + b, 0);
-  holder.innerHTML = `<div class="stat-card"><div class="num">${total}</div><div class="lbl">إجمالي كل المرفقات</div></div>${roots.map((r, i) => `<div class="stat-card"><div class="num">${counts[i]}</div><div class="lbl">${escapeHtml(r.title)}</div></div>`).join("")}`;
-}
+async function renderFolderView(){
+  const el = document.getElementById("contentArea");
+  const meta = MODULE_LABELS[contentState.module];
+  el.innerHTML = `<div class="loading-placeholder">جاري التحميل...</div>`;
 
-async function loadSubFolders(parentId) {
-  const holder = document.getElementById("foldersHolder");
-  let q = supabaseClient.from("content_sections").select("*").eq("module", currentModule).order("created_at", { ascending: true });
-  q = parentId ? q.eq("parent_id", parentId) : q.is("parent_id", null);
-  const { data: sections, error } = await q;
-  if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
-  if (!sections || sections.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه أقسام فرعية بعد</div>`; return; }
-  const counts = await Promise.all(sections.map((s) =>
-    Promise.all([
-      supabaseClient.from("content_sections").select("id", { count: "exact", head: true }).eq("parent_id", s.id),
-      supabaseClient.from("content_items").select("id", { count: "exact", head: true }).eq("section_id", s.id),
-    ])
-  ));
-  holder.innerHTML = `<div class="folder-grid">` + sections.map((s, i) => {
-    const [subCount, itemCount] = counts[i];
-    return `
-    <div class="folder-card" style="--folder-color:${colorFor(s.color_index ?? i)}" onclick="enterFolder('${s.id}', '${escapeAttr(s.title)}')">
-      <div class="folder-actions-row">
-        <button class="folder-mini-btn" onclick="event.stopPropagation(); openEditSectionModal('${s.id}', '${escapeAttr(s.title)}', ${s.color_index ?? i})" title="تعديل">${icon("edit", 14)}</button>
-        <button class="folder-mini-btn danger" onclick="event.stopPropagation(); deleteFolder('${s.id}')" title="حذف">${icon("trash", 14)}</button>
-      </div>
-      <div class="folder-title">${escapeHtml(s.title)}</div>
-      <div class="folder-meta">${subCount.count ?? 0} قسم فرعي · ${itemCount.count ?? 0} مرفق</div>
-    </div>`;
-  }).join("") + `</div>`;
-}
-
-function enterFolder(id, title) { navStack.push({ id, title }); renderFolderView(); }
-
-async function loadItems(sectionId) {
-  const holder = document.getElementById("itemsHolder");
-  const { data, error } = await supabaseClient.from("content_items").select("*").eq("section_id", sectionId).order("created_at", { ascending: false });
-  if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
-  if (!data || data.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه مرفقات بهذا القسم بعد</div>`; return; }
-  holder.innerHTML = data.map((item) => `
-    <div class="item-row">
-      <div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}${item.external_url ? ` <span class="sub-badge">رابط خارجي</span>` : ""}</div></div>
-      <div class="actions">
-        ${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">${icon("eye", 15)}</a>` : ""}
-        ${item.external_url ? `<a class="icon-btn" href="${item.external_url}" target="_blank" title="فتح الرابط">${icon("link", 15)}</a>` : ""}
-        <button class="icon-btn" onclick="openMoveItemModal('${item.id}', '${sectionId}')" title="نقل لقسم آخر">${icon("move", 15)}</button>
-        <button class="icon-btn danger" onclick="deleteItem('${item.id}')" title="حذف">${icon("trash", 15)}</button>
-      </div>
-    </div>`).join("");
-}
-
-function openSectionModal(parentId) {
-  document.getElementById("modalTitle").textContent = parentId ? "إضافة قسم فرعي" : "إضافة قسم جديد";
-  document.getElementById("modalFields").innerHTML = `
-    <div class="field"><label>اسم القسم</label><input type="text" id="s_title" required /></div>
-    <div class="field"><label>اللون</label><div class="color-swatch-row">${FOLDER_COLORS.map((c, i) => `<div class="color-swatch ${i === 0 ? "selected" : ""}" data-index="${i}" style="background:${c}"></div>`).join("")}</div></div>`;
-  let selectedColor = 0;
-  setTimeout(() => {
-    document.querySelectorAll(".color-swatch").forEach((sw) => {
-      sw.addEventListener("click", () => { document.querySelectorAll(".color-swatch").forEach((x) => x.classList.remove("selected")); sw.classList.add("selected"); selectedColor = parseInt(sw.dataset.index, 10); });
-    });
-  }, 0);
-  document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("modalForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const submitBtn = document.getElementById("modalSubmit");
-    submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
-    const title = document.getElementById("s_title").value.trim();
-    const { error } = await supabaseClient.from("content_sections").insert({ title, module: currentModule, parent_id: parentId, color_index: selectedColor });
-    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
-    if (error) { alert("تعذر الإضافة: " + error.message); return; }
-    document.getElementById("modalOverlay").classList.remove("show");
-    await loadSubFolders(parentId);
-    if (!parentId) await loadDashboardStats();
-  };
-  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
-}
-
-// ============ تعديل القسم (إعادة تسمية + تغيير لون) ============
-
-function openEditSectionModal(sectionId, currentTitle, currentColorIndex) {
-  document.getElementById("modalTitle").textContent = "تعديل القسم";
-  document.getElementById("modalFields").innerHTML = `
-    <div class="field"><label>اسم القسم</label><input type="text" id="es_title" value="${escapeAttr(currentTitle)}" required /></div>
-    <div class="field"><label>اللون</label><div class="color-swatch-row">${FOLDER_COLORS.map((c, i) => `<div class="color-swatch ${i === (currentColorIndex ?? 0) ? "selected" : ""}" data-index="${i}" style="background:${c}"></div>`).join("")}</div></div>`;
-  let selectedColor = currentColorIndex ?? 0;
-  setTimeout(() => {
-    document.querySelectorAll(".color-swatch").forEach((sw) => {
-      sw.addEventListener("click", () => { document.querySelectorAll(".color-swatch").forEach((x) => x.classList.remove("selected")); sw.classList.add("selected"); selectedColor = parseInt(sw.dataset.index, 10); });
-    });
-  }, 0);
-  document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("modalForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const submitBtn = document.getElementById("modalSubmit");
-    submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
-    const title = document.getElementById("es_title").value.trim();
-    const { error } = await supabaseClient.from("content_sections").update({ title, color_index: selectedColor }).eq("id", sectionId);
-    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
-    if (error) { alert("تعذر التعديل: " + error.message); return; }
-    document.getElementById("modalOverlay").classList.remove("show");
-    await loadSubFolders(currentParentId());
-  };
-  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
-}
-
-async function deleteFolder(id) {
-  if (!confirm("متأكد تبي تحذف هذا القسم؟ سيتم حذف كل الأقسام الفرعية والمرفقات بداخله.")) return;
-  const { error } = await supabaseClient.from("content_sections").delete().eq("id", id);
-  if (error) { alert("تعذر الحذف"); return; }
-  await loadSubFolders(currentParentId());
-  if (!currentParentId()) await loadDashboardStats();
-}
-
-// ============ نقل مرفق لقسم آخر ============
-
-async function openMoveItemModal(itemId, currentSectionId) {
-  document.getElementById("modalTitle").textContent = "نقل المرفق لقسم آخر";
-  document.getElementById("modalFields").innerHTML = `<div class="field"><label>القسم الوجهة</label><select id="mv_target" style="width:100%; background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:10px; padding:13px 14px; color:var(--text-primary); font-family:var(--font-body);"><option>جاري التحميل...</option></select></div>`;
-  document.getElementById("modalOverlay").classList.add("show");
-
-  const { data: allSections } = await supabaseClient.from("content_sections").select("*").eq("module", currentModule).order("created_at");
-  const byParent = {};
-  (allSections || []).forEach((s) => { const p = s.parent_id || "root"; if (!byParent[p]) byParent[p] = []; byParent[p].push(s); });
-
-  const options = [];
-  function walk(parentKey, depth) {
-    (byParent[parentKey] || []).forEach((s) => {
-      if (s.id !== currentSectionId) options.push({ id: s.id, label: "— ".repeat(depth) + s.title });
-      walk(s.id, depth + 1);
-    });
-  }
-  walk("root", 0);
-
-  const sel = document.getElementById("mv_target");
-  if (options.length === 0) { sel.innerHTML = `<option value="">ما فيه أقسام ثانية متاحة</option>`; }
-  else sel.innerHTML = options.map((o) => `<option value="${o.id}">${escapeHtml(o.label)}</option>`).join("");
-
-  document.getElementById("modalForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const targetId = document.getElementById("mv_target").value;
-    if (!targetId) { alert("اختر قسم"); return; }
-    const submitBtn = document.getElementById("modalSubmit");
-    submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
-    const { error } = await supabaseClient.from("content_items").update({ section_id: targetId }).eq("id", itemId);
-    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
-    if (error) { alert("تعذر النقل: " + error.message); return; }
-    document.getElementById("modalOverlay").classList.remove("show");
-    await loadItems(currentSectionId);
-  };
-  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
-}
-
-function openAddItemModal(sectionId, sectionTitle) {
-  document.getElementById("modalTitle").textContent = "إضافة مرفق إلى: " + sectionTitle;
-  document.getElementById("modalFields").innerHTML = `
-    <div class="field"><label>نوع المرفق</label>
-      <div class="btn-pill-choice" id="itemTypeChoice">
-        <button type="button" class="positive active" data-type="file">ملف</button>
-        <button type="button" data-type="link">رابط خارجي</button>
-      </div>
-    </div>
-    <div class="field"><label>العنوان</label><input type="text" id="f_title" required /></div>
-    <div class="field"><label>الوصف (اختياري)</label><input type="text" id="f_description" /></div>
-    <div id="fileFieldsHolder">
-      <div class="field"><label>الملف (أي صيغة)</label><input type="file" id="f_file" /></div>
-      <div class="field"><label>التقط صورة مباشرة بالكاميرا</label><input type="file" id="f_camera" accept="image/*" capture="environment" /></div>
-    </div>
-    <div id="linkFieldsHolder" style="display:none;">
-      <div class="field"><label>الرابط</label><input type="text" id="f_url" placeholder="https://..." /></div>
-    </div>
-  `;
-  let itemType = "file";
-  document.querySelectorAll("#itemTypeChoice button").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll("#itemTypeChoice button").forEach((b) => b.classList.remove("active", "positive"));
-      btn.classList.add("active", "positive");
-      itemType = btn.dataset.type;
-      document.getElementById("fileFieldsHolder").style.display = itemType === "file" ? "" : "none";
-      document.getElementById("linkFieldsHolder").style.display = itemType === "link" ? "" : "none";
-    });
+  let breadcrumbHtml = `<a href="#" class="crumb" onclick="event.preventDefault();renderModule('${contentState.module}')">${meta.page}</a>`;
+  contentState.path.forEach((p,i) => {
+    breadcrumbHtml += ` <span class="crumb-sep">/</span> <a href="#" class="crumb" onclick="event.preventDefault();enterFolderByIndex(${i})">${p.title}</a>`;
   });
-  document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("modalForm").onsubmit = async (e) => { e.preventDefault(); await submitItem(sectionId, itemType); };
-  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
+
+  let statsHtml = "";
+  if (!contentState.currentSectionId) {
+    const stats = await loadDashboardStats(contentState.module);
+    statsHtml = `
+      <div class="stats-grid" style="margin-bottom:20px;">
+        <div class="stat-card"><div class="stat-ic">${icon("folder",22)}</div><div><strong>${stats.folders}</strong><span>مجلد</span></div></div>
+        <div class="stat-card"><div class="stat-ic">${icon("note",22)}</div><div><strong>${stats.items}</strong><span>عنصر</span></div></div>
+      </div>`;
+  }
+
+  const backBtn = contentState.currentSectionId
+    ? `<button class="btn-back" onclick="goBackFolder()">${icon("back",18)}<span>رجوع</span></button>`
+    : `<button class="btn-back" onclick="routeSectionBack()">${icon("back",18)}<span>رجوع للرئيسية</span></button>`;
+
+  el.innerHTML = `
+    <div class="page-head">
+      ${backBtn}
+      <div class="breadcrumb">${breadcrumbHtml}</div>
+      <h2>${contentState.path.length ? contentState.path[contentState.path.length-1].title : meta.page}</h2>
+    </div>
+    ${statsHtml}
+    <div class="toolbar-row">
+      <button class="btn-primary" onclick="openSectionModal(null)">${icon("plus",16)}<span>مجلد جديد</span></button>
+      <button class="btn-secondary" onclick="openAddItemModal('${contentState.currentSectionId||''}')">${icon("plus",16)}<span>إضافة عنصر</span></button>
+    </div>
+    <div id="foldersGrid" class="folder-grid"></div>
+    <div id="itemsList" class="items-list"></div>
+  `;
+  hydrateIcons(el);
+  loadSubFolders();
+  if (contentState.currentSectionId) loadItems();
 }
 
-async function submitItem(sectionId, itemType) {
-  const submitBtn = document.getElementById("modalSubmit");
-  submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
-  const title = document.getElementById("f_title").value.trim();
-  const description = document.getElementById("f_description").value.trim();
-  let fileUrl = null, fileType = null, externalUrl = null;
+function routeSectionBack(){ loadHomeStats(); }
+
+async function loadSubFolders(){
+  const holder = document.getElementById("foldersGrid");
+  let list = [];
+  if (contentState.currentSectionId) {
+    const r = await supabaseClient.from("content_sections").select("*").eq("module", contentState.module).eq("parent_id", contentState.currentSectionId).order("title");
+    list = r.data || [];
+  } else {
+    const r = await supabaseClient.from("content_sections").select("*").eq("module", contentState.module).is("parent_id", null).order("title");
+    list = r.data || [];
+  }
+  if (!list.length) { holder.innerHTML = `<p class="muted" style="grid-column:1/-1;">لا توجد مجلدات بعد.</p>`; return; }
+  holder.innerHTML = list.map(f => `
+    <div class="folder-card" style="--folder-color:${f.color_index !== null && FOLDER_COLORS[f.color_index] ? FOLDER_COLORS[f.color_index] : FOLDER_COLORS[0]}">
+      <div class="folder-card-main" onclick="enterFolder('${f.id}','${(f.title||'').replace(/'/g,"\\'")}')">
+        ${icon("folder",26)}
+        <span class="folder-title">${f.title}</span>
+      </div>
+      <div class="folder-card-actions">
+        <button class="mini-btn" title="تعديل" onclick="openEditSectionModal('${f.id}')">${icon("edit",15)}</button>
+        <button class="mini-btn danger" title="حذف" onclick="deleteFolder('${f.id}')">${icon("trash",15)}</button>
+      </div>
+    </div>
+  `).join("");
+  hydrateIcons(holder);
+}
+
+function enterFolder(id, title){
+  contentState.path.push({ id, title });
+  contentState.currentSectionId = id;
+  renderFolderView();
+}
+function enterFolderByIndex(i){
+  contentState.path = contentState.path.slice(0, i+1);
+  contentState.currentSectionId = contentState.path[i].id;
+  renderFolderView();
+}
+function goBackFolder(){
+  contentState.path.pop();
+  contentState.currentSectionId = contentState.path.length ? contentState.path[contentState.path.length-1].id : null;
+  renderFolderView();
+}
+
+async function loadItems(){
+  const holder = document.getElementById("itemsList");
+  if (!holder) return;
+  const { data, error } = await supabaseClient.from("content_items").select("*").eq("section_id", contentState.currentSectionId).order("created_at", { ascending: false });
+  const items = data || [];
+  if (!items.length) { holder.innerHTML = `<p class="muted">لا توجد عناصر هنا بعد.</p>`; return; }
+  holder.innerHTML = items.map(it => {
+    const isLink = !!it.external_url && !it.file_url;
+    return `
+    <div class="item-row">
+      <div class="item-main" onclick="${isLink ? `window.open('${it.external_url}','_blank')` : `window.open('${it.file_url}','_blank')`}">
+        ${icon(isLink ? "link" : "note", 18)}
+        <span>${it.title || "بدون عنوان"}</span>
+        ${isLink ? `<span class="sub-badge">رابط خارجي</span>` : ""}
+      </div>
+      <div class="item-actions">
+        <button class="mini-btn" title="نقل" onclick="openMoveItemModal('${it.id}')">${icon("move",15)}</button>
+        <button class="mini-btn danger" title="حذف" onclick="deleteItem('${it.id}')">${icon("trash",15)}</button>
+      </div>
+    </div>`;
+  }).join("");
+  hydrateIcons(holder);
+}
+
+function openSectionModal(parentId){
+  openModal(`
+    <h3>مجلد جديد</h3>
+    <label>اسم المجلد</label>
+    <input type="text" id="newSectionTitle" placeholder="مثال: شهادات الشكر">
+    <label>اللون</label>
+    <div class="color-pick-row">
+      ${FOLDER_COLORS.map((c,i)=>`<span class="color-dot" data-color="${i}" style="background:${c}" onclick="selectColorDot(this)"></span>`).join("")}
+    </div>
+    <input type="hidden" id="newSectionColor" value="0">
+    <button class="btn-primary full" onclick="submitNewSection()">إنشاء</button>
+  `);
+  document.querySelectorAll(".color-dot")[0]?.classList.add("selected");
+}
+function selectColorDot(el){
+  document.querySelectorAll(".color-dot").forEach(d=>d.classList.remove("selected"));
+  el.classList.add("selected");
+  document.getElementById("newSectionColor").value = el.getAttribute("data-color");
+}
+async function submitNewSection(){
+  const title = document.getElementById("newSectionTitle").value.trim();
+  const color = parseInt(document.getElementById("newSectionColor").value || "0");
+  if (!title) return alert("أدخل اسم المجلد");
+  await supabaseClient.from("content_sections").insert({
+    module: contentState.module, title, color_index: color, parent_id: contentState.currentSectionId
+  });
+  closeModal();
+  renderFolderView();
+}
+
+async function openEditSectionModal(id){
+  const { data: sec } = await supabaseClient.from("content_sections").select("*").eq("id", id).single();
+  if (!sec) return;
+  openModal(`
+    <h3>تعديل المجلد</h3>
+    <label>اسم المجلد</label>
+    <input type="text" id="editSectionTitle" value="${sec.title || ""}">
+    <label>اللون</label>
+    <div class="color-pick-row">
+      ${FOLDER_COLORS.map((c,i)=>`<span class="color-dot ${i===sec.color_index?'selected':''}" data-color="${i}" style="background:${c}" onclick="selectColorDot(this)"></span>`).join("")}
+    </div>
+    <input type="hidden" id="newSectionColor" value="${sec.color_index||0}">
+    <button class="btn-primary full" onclick="submitEditSection('${id}')">حفظ التعديلات</button>
+  `);
+}
+async function submitEditSection(id){
+  const title = document.getElementById("editSectionTitle").value.trim();
+  const color = parseInt(document.getElementById("newSectionColor").value || "0");
+  if (!title) return alert("أدخل اسم المجلد");
+  await supabaseClient.from("content_sections").update({ title, color_index: color }).eq("id", id);
+  closeModal();
+  renderFolderView();
+}
+
+async function deleteFolder(id){
+  if (!confirm("سيتم حذف المجلد وكل ما بداخله. متأكد؟")) return;
+  await supabaseClient.from("content_sections").delete().eq("id", id);
+  renderFolderView();
+}
+
+async function openMoveItemModal(itemId){
+  const { data: allSections } = await supabaseClient.from("content_sections").select("id, title, parent_id").eq("module", contentState.module).order("title");
+  function buildOptions(parentId, depth){
+    let html = "";
+    (allSections||[]).filter(s => s.parent_id === parentId).forEach(s => {
+      html += `<option value="${s.id}">${"— ".repeat(depth)}${s.title}</option>`;
+      html += buildOptions(s.id, depth+1);
+    });
+    return html;
+  }
+  openModal(`
+    <h3>نقل العنصر</h3>
+    <label>اختر المجلد الوجهة</label>
+    <select id="moveDestSelect">
+      <option value="">(المجلد الرئيسي)</option>
+      ${buildOptions(null, 0)}
+    </select>
+    <button class="btn-primary full" onclick="submitMoveItem('${itemId}')">نقل</button>
+  `);
+}
+async function submitMoveItem(itemId){
+  const dest = document.getElementById("moveDestSelect").value || null;
+  await supabaseClient.from("content_items").update({ section_id: dest }).eq("id", itemId);
+  closeModal();
+  renderFolderView();
+}
+
+function openAddItemModal(sectionId){
+  if (!sectionId) return alert("ادخل مجلد أولاً لإضافة عنصر بداخله");
+  openModal(`
+    <h3>إضافة عنصر</h3>
+    <div class="btn-pill-choice">
+      <button type="button" class="pill active" id="pillFile" onclick="switchItemType('file')">ملف</button>
+      <button type="button" class="pill" id="pillLink" onclick="switchItemType('link')">رابط خارجي</button>
+    </div>
+    <div id="itemTypeFields">
+      <label>العنوان</label>
+      <input type="text" id="itemTitle" placeholder="عنوان العنصر">
+      <div id="fileFields">
+        <label>الملف</label>
+        <input type="file" id="itemFile">
+        <label>أو التقط صورة بالكاميرا</label>
+        <input type="file" id="itemFileCamera" accept="image/*" capture="environment">
+      </div>
+      <div id="linkFields" style="display:none;">
+        <label>الرابط</label>
+        <input type="url" id="itemUrl" placeholder="https://...">
+      </div>
+    </div>
+    <button class="btn-primary full" id="submitItemBtn" onclick="submitItem('${sectionId}','file')">إضافة</button>
+  `);
+}
+function switchItemType(type){
+  document.getElementById("pillFile").classList.toggle("active", type==="file");
+  document.getElementById("pillLink").classList.toggle("active", type==="link");
+  document.getElementById("fileFields").style.display = type==="file" ? "" : "none";
+  document.getElementById("linkFields").style.display = type==="link" ? "" : "none";
+  document.getElementById("submitItemBtn").setAttribute("onclick", `submitItem('${contentState.currentSectionId}','${type}')`);
+}
+
+async function submitItem(sectionId, itemType){
+  const title = document.getElementById("itemTitle").value.trim();
+  if (!title) return alert("أدخل عنوان العنصر");
+  const btn = document.getElementById("submitItemBtn");
+  btn.disabled = true; btn.textContent = "جاري الحفظ...";
   try {
     if (itemType === "link") {
-      externalUrl = document.getElementById("f_url").value.trim();
-      if (!externalUrl) { alert("اكتب الرابط"); submitBtn.disabled = false; submitBtn.textContent = "حفظ"; return; }
+      const url = document.getElementById("itemUrl").value.trim();
+      if (!url) { alert("أدخل الرابط"); btn.disabled=false; btn.textContent="إضافة"; return; }
+      await supabaseClient.from("content_items").insert({ section_id: sectionId, title, external_url: url });
     } else {
-      const file = document.getElementById("f_camera").files[0] || document.getElementById("f_file").files[0];
-      if (file) {
-        const filePath = `${currentModule}/${Date.now()}_${sanitizeFileName(file.name)}`;
-        const { error: uploadError } = await supabaseClient.storage.from(BUCKET_NAME).upload(filePath, file);
-        if (uploadError) throw uploadError;
-        const { data: publicUrlData } = supabaseClient.storage.from(BUCKET_NAME).getPublicUrl(filePath);
-        fileUrl = publicUrlData.publicUrl; fileType = file.name.split(".").pop();
-      }
+      const fileInput = document.getElementById("itemFile");
+      const camInput = document.getElementById("itemFileCamera");
+      const file = (fileInput.files[0]) || (camInput.files[0]);
+      if (!file) { alert("اختر ملفاً"); btn.disabled=false; btn.textContent="إضافة"; return; }
+      const path = `${contentState.module}/${Date.now()}_${file.name}`;
+      const { error: upErr } = await supabaseClient.storage.from("maharat-files").upload(path, file);
+      if (upErr) throw upErr;
+      const { data: pub } = supabaseClient.storage.from("maharat-files").getPublicUrl(path);
+      await supabaseClient.from("content_items").insert({ section_id: sectionId, title, file_url: pub.publicUrl, file_type: file.type });
     }
-    const { error: insertError } = await supabaseClient.from("content_items").insert({ title, description, section_id: sectionId, file_url: fileUrl, file_type: fileType, external_url: externalUrl });
-    if (insertError) throw insertError;
-    document.getElementById("modalOverlay").classList.remove("show");
-    await loadItems(sectionId);
-  } catch (err) {
-    alert("حدث خطأ: " + (err.message || "تعذر الحفظ"));
-  } finally {
-    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
+    closeModal();
+    renderFolderView();
+  } catch (e) {
+    alert("حدث خطأ أثناء الحفظ: " + (e.message || e));
+    btn.disabled = false; btn.textContent = "إضافة";
   }
 }
 
-function sanitizeFileName(name) { return name.replace(/[^a-zA-Z0-9.\-_]/g, "_"); }
+async function deleteItem(id){
+  if (!confirm("حذف هذا العنصر؟")) return;
+  await supabaseClient.from("content_items").delete().eq("id", id);
+  loadItems();
+}
 
-async function deleteItem(id) {
-  if (!confirm("متأكد تبي تحذف هذا المرفق؟")) return;
-  const { error } = await supabaseClient.from("content_items").delete().eq("id", id);
-  if (error) { alert("تعذر الحذف"); return; }
-  await loadItems(currentParentId());
+// ---- shared modal helpers ----
+function openModal(innerHtml){
+  let overlay = document.getElementById("modalOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "modalOverlay";
+    overlay.className = "modal-overlay";
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = `<div class="modal-box">
+    <button class="modal-close" onclick="closeModal()">${icon("close",16)}</button>
+    <div class="modal-body">${innerHtml}</div>
+  </div>`;
+  overlay.style.display = "flex";
+  hydrateIcons(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+}
+function closeModal(){
+  const overlay = document.getElementById("modalOverlay");
+  if (overlay) overlay.style.display = "none";
 }

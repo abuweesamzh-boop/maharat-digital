@@ -1,57 +1,51 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>المنصة الإلكترونية للمعلم فيصل بن تويم الزهراني</title>
-<link rel="stylesheet" href="css/style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة التحكم — منصة المعلم فيصل</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-<div class="pixel-field"></div>
 <div class="app-shell">
   <aside class="sidebar" id="sidebar">
-    <div class="logo" style="font-size:15px; line-height:1.6;">المنصة الإلكترونية<br>للمعلم <span>فيصل بن تويم الزهراني</span></div>
-    <div class="role-tag" id="roleTag">جاري التحميل...</div>
-    <div class="nav-group">
-      <div class="nav-group-title">الرئيسية</div>
-      <div class="nav-link active" data-section="home"><span class="ico" data-icon="home"></span> نظرة عامة</div>
+    <div class="sidebar-top">
+      <div class="logo-box">
+        <div class="logo-mark">ف</div>
+        <div class="logo-text">
+          <strong>منصة المعلم فيصل</strong>
+          <span id="userRoleTag">معلم</span>
+        </div>
+      </div>
     </div>
-    <div class="nav-group" id="teacherNav">
-      <div class="nav-group-title">المحتوى</div>
-      <div class="nav-link" data-section="portfolio"><span class="ico" data-icon="folder"></span> ملف إنجاز المعلم</div>
-      <div class="nav-link" data-section="classes"><span class="ico" data-icon="list"></span> سجل المتابعة</div>
-      <div class="nav-link" data-section="externallinks"><span class="ico" data-icon="rocket"></span> مهارات رقمية - الصفوف</div>
-      <div class="nav-link" data-section="sharelinks"><span class="ico" data-icon="link"></span> روابط المشاركة</div>
-      <div class="nav-link" data-section="cv"><span class="ico" data-icon="note"></span> السيرة الذاتية</div>
+    <nav class="side-nav">
+      <a href="#" class="nav-item active" data-section="home" data-icon="home"><span class="nav-ic"></span>الرئيسية</a>
+      <div class="nav-group-label">المحتوى</div>
+      <a href="#" class="nav-item teacherNav" data-section="portfolio" data-icon="folder"><span class="nav-ic"></span>ملف إنجاز المعلم</a>
+      <a href="#" class="nav-item teacherNav" data-section="classes" data-icon="list"><span class="nav-ic"></span>سجل المتابعة</a>
+      <a href="#" class="nav-item teacherNav" data-section="externallinks" data-icon="rocket"><span class="nav-ic"></span>مهارات رقمية - الصفوف</a>
+      <a href="#" class="nav-item teacherNav" data-section="sharelinks" data-icon="link"><span class="nav-ic"></span>روابط المشاركة</a>
+      <a href="#" class="nav-item teacherNav" data-section="cv" data-icon="note"><span class="nav-ic"></span>السيرة الذاتية</a>
+    </nav>
+    <div class="sidebar-bottom">
+      <button id="logoutBtn" class="nav-item logout-btn" data-icon="logout"><span class="nav-ic"></span>تسجيل الخروج</button>
     </div>
-    <div class="logout" id="logoutBtn"><span class="ico" data-icon="logout"></span> تسجيل الخروج</div>
   </aside>
   <main class="main-area">
-    <div class="topbar">
-      <button class="hamburger" id="hamburger"><span class="ico" data-icon="menu"></span></button>
-      <h1 id="pageTitle">نظرة عامة</h1>
-      <div class="user-chip">
-        <div class="avatar" id="userAvatar">؟</div>
-        <span id="userName">جاري التحميل...</span>
-      </div>
+    <header class="topbar">
+      <button id="menuToggle" class="icon-btn only-mobile" data-icon="menu"></button>
+      <div class="topbar-title" id="topbarTitle">الرئيسية</div>
+      <div class="topbar-user" id="topbarUser"></div>
+    </header>
+    <div class="content-area" id="contentArea">
+      <div class="loading-placeholder">جاري التحميل...</div>
     </div>
-    <div id="contentArea"></div>
   </main>
 </div>
-<div class="modal-overlay" id="modalOverlay">
-  <div class="modal-box">
-    <h3 id="modalTitle">إضافة عنصر</h3>
-    <form id="modalForm">
-      <div id="modalFields"></div>
-      <div class="modal-actions">
-        <button type="button" class="btn-secondary" id="modalCancel">إلغاء</button>
-        <button type="submit" class="btn-primary" id="modalSubmit">حفظ</button>
-      </div>
-    </form>
-  </div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="js/icons.js"></script>
 <script src="js/supabaseClient.js"></script>
 <script src="js/dashboard.js"></script>

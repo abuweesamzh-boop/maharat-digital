@@ -1,252 +1,251 @@
-const CLASS_COLORS = ["#0F2542", "#B8862E", "#3C6E5A", "#7A4B8A", "#1F6F8B", "#8A4B3C"];
-let currentClass = null;
+let classesState = { currentClassId: null, currentClassTitle: "" };
+const CLASS_COLORS = ["#0F2542","#B8862E","#1F8A5C","#6B4EA6","#C1443B","#1B7F9E"];
 
-async function renderClassesSection() {
-  document.getElementById("pageTitle").textContent = "سجل المتابعة";
-  const contentArea = document.getElementById("contentArea");
-  contentArea.innerHTML = `
-    <div class="section-card" style="margin-bottom:20px;">
-      <div class="section-head"><h3>${icon("search")} بحث سريع عن طالب (كل الفصول)</h3></div>
-      <input type="text" id="globalSearchInput" placeholder="اكتب اسم الطالب..." />
-      <div id="globalSearchResults" style="margin-top:10px;"></div>
+function renderClassesSection(){
+  classesState = { currentClassId: null, currentClassTitle: "" };
+  renderClassesRoot();
+}
+
+async function renderClassesRoot(){
+  const el = document.getElementById("contentArea");
+  el.innerHTML = `<div class="loading-placeholder">جاري التحميل...</div>`;
+  el.innerHTML = `
+    <div class="page-head">
+      <button class="btn-back" onclick="loadHomeStats()">${icon("back",18)}<span>رجوع للرئيسية</span></button>
+      <h2>سجل المتابعة</h2>
     </div>
-    <div class="section-card">
-      <div class="section-head"><h3>الفصول</h3><button class="btn-add" id="addClassBtn">${icon("plus", 14)} إضافة فصل جديد</button></div>
-      <div id="classesHolder" class="folder-grid"><div class="empty-state">جاري التحميل...</div></div>
-    </div>`;
-  document.getElementById("addClassBtn").addEventListener("click", openAddClassModal);
-  let searchTimeout;
-  document.getElementById("globalSearchInput").addEventListener("input", (e) => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => globalStudentSearch(e.target.value), 300);
-  });
-  await loadClasses();
+    <div class="toolbar-row">
+      <input type="text" id="globalStudentSearch" placeholder="بحث عن طالب في كل الفصول..." oninput="globalStudentSearch(this.value)">
+      <button class="btn-primary" onclick="openClassModal(null)">${icon("plus",16)}<span>فصل جديد</span></button>
+    </div>
+    <div id="globalSearchResults"></div>
+    <div id="classesGrid" class="folder-grid"></div>
+  `;
+  hydrateIcons(el);
+  loadClassesGrid();
 }
 
-async function globalStudentSearch(query) {
-  const resultsEl = document.getElementById("globalSearchResults");
-  if (!query || query.trim().length < 2) { resultsEl.innerHTML = ""; return; }
-  const { data, error } = await supabaseClient.from("students").select("*, classes(title)").ilike("full_name", `%${query.trim()}%`).limit(10);
-  if (error || !data || data.length === 0) { resultsEl.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه نتائج</div>`; return; }
-  resultsEl.innerHTML = data.map((s) => `<div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}')"><div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">${s.classes ? escapeHtml(s.classes.title) : "بدون فصل"} · الصف ${escapeHtml(s.grade)}</div></div><div class="actions"><span class="icon-btn">${icon("back", 14)}</span></div></div>`).join("");
-}
-
-async function loadClasses() {
-  const holder = document.getElementById("classesHolder");
-  const { data: classes, error } = await supabaseClient.from("classes").select("*").order("created_at", { ascending: true });
-  if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
-  if (!classes || classes.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه فصول بعد — أضف فصل جديد للبدء</div>`; return; }
-  const counts = await Promise.all(classes.map((c) => supabaseClient.from("students").select("id", { count: "exact", head: true }).eq("class_id", c.id)));
-  holder.innerHTML = classes.map((c, i) => `
-    <div class="folder-card" style="--folder-color:${CLASS_COLORS[i % CLASS_COLORS.length]}" onclick="openClass('${c.id}', '${escapeAttr(c.title)}')">
-      <div class="folder-actions-row">
-        <button class="folder-mini-btn" onclick="event.stopPropagation(); openEditClassModal('${c.id}', '${escapeAttr(c.title)}')" title="تعديل">${icon("edit", 14)}</button>
-        <button class="folder-mini-btn danger" onclick="event.stopPropagation(); deleteClass('${c.id}')" title="حذف">${icon("trash", 14)}</button>
+async function loadClassesGrid(){
+  const holder = document.getElementById("classesGrid");
+  const { data } = await supabaseClient.from("classes").select("*").order("title");
+  const list = data || [];
+  if (!list.length) { holder.innerHTML = `<p class="muted" style="grid-column:1/-1;">لا توجد فصول بعد.</p>`; return; }
+  holder.innerHTML = list.map(c => `
+    <div class="folder-card" style="--folder-color:${CLASS_COLORS[c.color_index % CLASS_COLORS.length] || CLASS_COLORS[0]}">
+      <div class="folder-card-main" onclick="openClass('${c.id}','${(c.title||'').replace(/'/g,"\\'")}')">
+        ${icon("list",26)}
+        <span class="folder-title">${c.title}</span>
       </div>
-      <div class="folder-title">${escapeHtml(c.title)}</div>
-      <div class="folder-meta">${counts[i].count ?? 0} طالب</div>
-    </div>`).join("");
-}
-
-function escapeHtml(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
-function escapeAttr(str) { return (str || "").replace(/'/g, "&#39;"); }
-
-function openAddClassModal() {
-  document.getElementById("modalTitle").textContent = "إضافة فصل جديد";
-  document.getElementById("modalFields").innerHTML = `<div class="field"><label>اسم الفصل</label><input type="text" id="c_title" placeholder="مثال: الفصل 1" required /></div>`;
-  document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("modalForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const submitBtn = document.getElementById("modalSubmit");
-    submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
-    const title = document.getElementById("c_title").value.trim();
-    const { error } = await supabaseClient.from("classes").insert({ title });
-    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
-    if (error) { alert("تعذر إضافة الفصل"); return; }
-    document.getElementById("modalOverlay").classList.remove("show");
-    await loadClasses();
-  };
-  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
-}
-
-function openEditClassModal(classId, currentTitle) {
-  document.getElementById("modalTitle").textContent = "تعديل اسم الفصل";
-  document.getElementById("modalFields").innerHTML = `<div class="field"><label>اسم الفصل</label><input type="text" id="ec_title" value="${escapeAttr(currentTitle)}" required /></div>`;
-  document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("modalForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const submitBtn = document.getElementById("modalSubmit");
-    submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
-    const title = document.getElementById("ec_title").value.trim();
-    const { error } = await supabaseClient.from("classes").update({ title }).eq("id", classId);
-    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
-    if (error) { alert("تعذر التعديل"); return; }
-    document.getElementById("modalOverlay").classList.remove("show");
-    await loadClasses();
-  };
-  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
-}
-
-async function deleteClass(id) {
-  if (!confirm("متأكد تبي تحذف هذا الفصل؟ الطلاب ما بينحذفون، بس بيصيرون بدون فصل.")) return;
-  const { error } = await supabaseClient.from("classes").delete().eq("id", id);
-  if (error) { alert("تعذر الحذف"); return; }
-  await loadClasses();
-}
-
-async function openClass(classId, title) {
-  currentClass = { id: classId, title };
-  document.getElementById("pageTitle").textContent = title;
-  const contentArea = document.getElementById("contentArea");
-  contentArea.innerHTML = `
-    <button class="btn-back no-print" onclick="renderClassesSection()">${icon("back", 15)} رجوع لسجل المتابعة</button>
-    <div class="breadcrumb-nav"><span class="crumb" onclick="renderClassesSection()">سجل المتابعة</span><span>/</span><span class="crumb current">${escapeHtml(title)}</span></div>
-
-    <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
-      <button class="toolbar-icon-btn" id="toggleSearchBtn">${icon("search", 15)} بحث عن طالب</button>
-      <button class="toolbar-icon-btn" id="toggleImportBtn">${icon("upload", 15)} استيراد إكسل</button>
-      <button class="btn-add" id="addStudentBtn">${icon("plus", 14)} إضافة طالب</button>
-    </div>
-
-    <div class="section-card" id="searchPanel" style="margin-bottom:18px; display:none;">
-      <div class="section-head"><h3>${icon("search")} بحث عن طالب بالفصل</h3></div>
-      <input type="text" id="classSearchInput" placeholder="بحث بالاسم..." />
-      <div id="searchInlineResults" style="margin-top:10px;"></div>
-    </div>
-
-    <div class="section-card" id="importPanel" style="margin-bottom:18px; display:none;">
-      <div class="section-head"><h3>استيراد من ملف إكسل</h3></div>
-      <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px; line-height:1.8;">الأعمدة بالترتيب: <b>الاسم</b>، <b>الصف</b>، <b>الرقم</b>.</p>
-      <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="margin-bottom:12px;" />
-      <div id="importStatus" style="font-size:13px; color:var(--text-muted);"></div>
-      <button class="btn-add" id="importBtn" style="margin-top:10px;">${icon("upload", 14)} استيراد الملف</button>
-    </div>
-
-    <div class="section-card" style="margin-bottom:18px;">
-      <div class="section-head"><h3>${icon("chart")} الحصص والاختبارات</h3></div>
-      <div id="gradingAreaHolder"></div>
-    </div>
-
-    <div class="section-card" style="margin-bottom:18px;">
-      <div class="section-head"><h3>${icon("chart")} تقرير الرصد</h3></div>
-      <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">جدول كامل بدرجات كل طلاب الفصل، مع إمكانية الطباعة والتصدير.</p>
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn-add" onclick="renderClassReport('${classId}', '${escapeAttr(title)}')">فتح تقرير الرصد</button>
-        <button class="toolbar-icon-btn" onclick="renderTeacherSpecialReport('${classId}', '${escapeAttr(title)}')">${icon("note", 15)} تقرير خاص بالفصل</button>
+      <div class="folder-card-actions">
+        <button class="mini-btn" title="تعديل" onclick="openEditClassModal('${c.id}')">${icon("edit",15)}</button>
+        <button class="mini-btn danger" title="حذف" onclick="deleteClass('${c.id}')">${icon("trash",15)}</button>
       </div>
     </div>
+  `).join("");
+  hydrateIcons(holder);
+}
 
-    <div class="section-card">
-      <div class="section-head">
-        <h3>طلاب الفصل</h3>
-        <button class="toolbar-icon-btn" id="printQrBtn">${icon("qr", 15)} طباعة باركودات الطلاب</button>
+function openClassModal(){
+  openModal(`
+    <h3>فصل جديد</h3>
+    <label>اسم الفصل</label>
+    <input type="text" id="newClassTitle" placeholder="مثال: أول متوسط 1">
+    <button class="btn-primary full" onclick="submitNewClass()">إنشاء</button>
+  `);
+}
+async function submitNewClass(){
+  const title = document.getElementById("newClassTitle").value.trim();
+  if (!title) return alert("أدخل اسم الفصل");
+  const { count } = await supabaseClient.from("classes").select("id", { count: "exact", head: true });
+  await supabaseClient.from("classes").insert({ title, color_index: (count||0) % CLASS_COLORS.length });
+  closeModal();
+  loadClassesGrid();
+}
+async function openEditClassModal(id){
+  const { data: c } = await supabaseClient.from("classes").select("*").eq("id", id).single();
+  openModal(`
+    <h3>تعديل الفصل</h3>
+    <label>اسم الفصل</label>
+    <input type="text" id="editClassTitle" value="${c.title||''}">
+    <button class="btn-primary full" onclick="submitEditClass('${id}')">حفظ</button>
+  `);
+}
+async function submitEditClass(id){
+  const title = document.getElementById("editClassTitle").value.trim();
+  if (!title) return alert("أدخل اسم الفصل");
+  await supabaseClient.from("classes").update({ title }).eq("id", id);
+  closeModal();
+  loadClassesGrid();
+}
+async function deleteClass(id){
+  if (!confirm("سيتم حذف الفصل. هل الطلاب سينتقلون؟ يفضل نقلهم أولاً. متابعة الحذف؟")) return;
+  await supabaseClient.from("classes").delete().eq("id", id);
+  loadClassesGrid();
+}
+
+async function globalStudentSearch(q){
+  const holder = document.getElementById("globalSearchResults");
+  if (!q || q.trim().length < 2) { holder.innerHTML = ""; return; }
+  const { data } = await supabaseClient
+    .from("students").select("*, classes(title)")
+    .ilike("full_name", `%${q.trim()}%`)
+    .order("full_name", { ascending: true });
+  const list = data || [];
+  if (!list.length) { holder.innerHTML = `<p class="muted">لا توجد نتائج.</p>`; return; }
+  holder.innerHTML = `<div class="items-list">` + list.map(s => `
+    <div class="item-row">
+      <div class="item-main" onclick="openClass('${s.class_id}','${(s.classes?.title||'').replace(/'/g,"\\'")}');setTimeout(()=>openStudentReport('${s.id}','${(s.full_name||'').replace(/'/g,"\\'")}'),400);">
+        ${icon("users",18)}
+        <span>${s.full_name}</span>
+        <span class="sub-badge">${s.classes?.title || ""}</span>
       </div>
-      <div id="studentsHolder"><div class="empty-state">جاري التحميل...</div></div>
-    </div>`;
-
-  document.getElementById("toggleSearchBtn").addEventListener("click", () => {
-    const panel = document.getElementById("searchPanel");
-    panel.style.display = panel.style.display === "none" ? "" : "none";
-  });
-  document.getElementById("toggleImportBtn").addEventListener("click", () => {
-    const panel = document.getElementById("importPanel");
-    panel.style.display = panel.style.display === "none" ? "" : "none";
-  });
-
-  document.getElementById("addStudentBtn").addEventListener("click", () => openAddStudentModal(classId));
-  document.getElementById("importBtn").addEventListener("click", () => handleExcelImport(classId));
-  document.getElementById("printQrBtn").addEventListener("click", () => printClassQRCodes(classId, title));
-
-  let searchTimeout;
-  document.getElementById("classSearchInput").addEventListener("input", (e) => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => searchWithinClassInline(classId, e.target.value), 250);
-  });
-
-  await loadClassStudents(classId, "");
-  renderGradingArea(classId, title);
+    </div>
+  `).join("") + `</div>`;
+  hydrateIcons(holder);
 }
 
-async function searchWithinClassInline(classId, query) {
-  const holder = document.getElementById("searchInlineResults");
-  if (!query || query.trim().length < 1) { holder.innerHTML = ""; return; }
-  const { data, error } = await supabaseClient.from("students").select("*").eq("class_id", classId).ilike("full_name", `%${query.trim()}%`);
-  if (error || !data || data.length === 0) { holder.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه نتائج</div>`; return; }
-  holder.innerHTML = data.map((s) => `<div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}', {id:'${classId}', title:'${escapeAttr(currentClass.title)}'})"><div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">الصف ${escapeHtml(s.grade)} · رقم ${escapeHtml(s.student_number)}</div></div><div class="actions"><span class="icon-btn">${icon("back", 14)}</span></div></div>`).join("");
+async function openClass(classId, title){
+  classesState.currentClassId = classId;
+  classesState.currentClassTitle = title;
+  const el = document.getElementById("contentArea");
+  el.innerHTML = `
+    <div class="page-head">
+      <button class="btn-back" onclick="renderClassesRoot()">${icon("back",18)}<span>رجوع لكل الفصول</span></button>
+      <h2>${title}</h2>
+    </div>
+    <div class="toolbar-row">
+      <button class="btn-secondary" onclick="toggleSearchPanel()">${icon("search",16)}<span>بحث</span></button>
+      <button class="btn-secondary" onclick="toggleImportPanel()">${icon("upload",16)}<span>استيراد إكسل</span></button>
+      <button class="btn-primary" onclick="openAddStudentModal()">${icon("plus",16)}<span>إضافة طالب</span></button>
+    </div>
+    <div id="searchPanel" class="collapsible-panel" style="display:none;">
+      <input type="text" id="classSearchInput" placeholder="ابحث عن طالب داخل الفصل..." oninput="searchWithinClassInline(this.value)">
+      <div id="classSearchResults"></div>
+    </div>
+    <div id="importPanel" class="collapsible-panel" style="display:none;">
+      <p class="muted">الأعمدة المطلوبة بالترتيب: الاسم، الصف، الرقم. أول صف (رأس الجدول) سيتم تجاهله تلقائياً.</p>
+      <input type="file" id="excelFile" accept=".xlsx,.xls">
+      <button class="btn-primary" onclick="handleExcelImport()">استيراد</button>
+    </div>
+
+    <div class="section-block">
+      <h3>${icon("chart",18)} الحصص والاختبارات</h3>
+      <div id="gradingArea"></div>
+    </div>
+
+    <div class="section-block">
+      <h3>${icon("note",18)} التقارير</h3>
+      <div class="toolbar-row">
+        <button class="btn-secondary" onclick="renderClassReport('${classId}','${title.replace(/'/g,"\\'")}')">تقرير الرصد</button>
+        <button class="btn-secondary" onclick="renderTeacherSpecialReport('${classId}','${title.replace(/'/g,"\\'")}')">تقرير خاص بالفصل</button>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <h3>${icon("users",18)} طلاب الفصل</h3>
+      <div class="toolbar-row">
+        <button class="btn-secondary" id="printQrBtn" onclick="printClassQRCodes('${classId}','${title.replace(/'/g,"\\'")}')">${icon("qr",16)}<span>طباعة باركود الفصل</span></button>
+      </div>
+      <div id="studentsHolder" class="items-list"></div>
+    </div>
+  `;
+  hydrateIcons(el);
+  loadClassStudents(classId);
+  renderGradingArea(classId);
 }
 
-async function loadClassStudents(classId, query) {
+function toggleSearchPanel(){
+  const p = document.getElementById("searchPanel");
+  p.style.display = p.style.display === "none" ? "" : "none";
+}
+function toggleImportPanel(){
+  const p = document.getElementById("importPanel");
+  p.style.display = p.style.display === "none" ? "" : "none";
+}
+
+async function loadClassStudents(classId){
   const holder = document.getElementById("studentsHolder");
-  let q = supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
-  if (query && query.trim()) q = q.ilike("full_name", `%${query.trim()}%`);
-  const { data, error } = await q;
-  if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
-  if (!data || data.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه طلاب بهذا الفصل بعد</div>`; return; }
-  holder.innerHTML = data.map((s) => `<div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}')"><div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">الصف ${escapeHtml(s.grade)} · رقم ${escapeHtml(s.student_number)}</div></div><div class="actions"><span class="icon-btn" title="عرض التقرير">${icon("back", 14)}</span><button class="icon-btn danger" onclick="event.stopPropagation(); deleteStudent('${s.id}', '${classId}')" title="حذف">${icon("trash", 14)}</button></div></div>`).join("");
+  const { data } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("full_name", { ascending: true });
+  const list = data || [];
+  if (!list.length) { holder.innerHTML = `<p class="muted">لا يوجد طلاب في هذا الفصل بعد.</p>`; return; }
+  holder.innerHTML = list.map(s => `
+    <div class="item-row">
+      <div class="item-main" onclick="openStudentReport('${s.id}','${(s.full_name||'').replace(/'/g,"\\'")}')">
+        ${icon("users",18)}
+        <span>${s.full_name}</span>
+        <span class="sub-badge">${s.grade || ""}</span>
+      </div>
+      <div class="item-actions">
+        <button class="mini-btn" title="نقل لفصل آخر" onclick="openTransferModal('${s.id}','${(s.full_name||'').replace(/'/g,"\\'")}')">${icon("swap",15)}</button>
+        <button class="mini-btn" title="رمز ولي الأمر" onclick="openParentQrModal('${s.id}','${(s.full_name||'').replace(/'/g,"\\'")}')">${icon("qr",15)}</button>
+        <button class="mini-btn danger" title="حذف" onclick="deleteStudent('${s.id}')">${icon("trash",15)}</button>
+      </div>
+    </div>
+  `).join("");
+  hydrateIcons(holder);
 }
 
-function openAddStudentModal(classId) {
-  document.getElementById("modalTitle").textContent = "إضافة طالب";
-  document.getElementById("modalFields").innerHTML = `
-    <div class="field"><label>اسم الطالب</label><input type="text" id="st_name" required /></div>
-    <div class="field"><label>الصف</label><input type="text" id="st_grade" required /></div>
-    <div class="field"><label>الرقم</label><input type="text" id="st_number" required /></div>`;
-  document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("modalForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const submitBtn = document.getElementById("modalSubmit");
-    submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
-    const full_name = document.getElementById("st_name").value.trim();
-    const grade = document.getElementById("st_grade").value.trim();
-    const student_number = document.getElementById("st_number").value.trim();
-    const username = `${grade}${currentClass.title}${student_number}`.replace(/\s/g, "");
-    const { error } = await supabaseClient.from("students").insert({ full_name, grade, class_name: currentClass.title, student_number, username, class_id: classId });
-    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
-    if (error) { alert("تعذر إضافة الطالب"); return; }
-    document.getElementById("modalOverlay").classList.remove("show");
-    await loadClassStudents(classId, "");
-  };
-  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
+async function searchWithinClassInline(q){
+  const holder = document.getElementById("classSearchResults");
+  if (!q || q.trim().length < 1) { holder.innerHTML = ""; return; }
+  const { data } = await supabaseClient
+    .from("students").select("*")
+    .eq("class_id", classesState.currentClassId)
+    .ilike("full_name", `%${q.trim()}%`)
+    .order("full_name", { ascending: true });
+  const list = data || [];
+  holder.innerHTML = list.map(s => `
+    <div class="item-row"><div class="item-main" onclick="openStudentReport('${s.id}','${(s.full_name||'').replace(/'/g,"\\'")}')">${icon("users",16)}<span>${s.full_name}</span></div></div>
+  `).join("") || `<p class="muted">لا توجد نتائج.</p>`;
+  hydrateIcons(holder);
 }
 
-async function deleteStudent(id, classId) {
-  if (!confirm("متأكد تبي تحذف هذا الطالب؟ سيُحذف سجل درجاته أيضاً.")) return;
-  const { error } = await supabaseClient.from("students").delete().eq("id", id);
-  if (error) { alert("تعذر الحذف"); return; }
-  await loadClassStudents(classId, "");
+function openAddStudentModal(){
+  openModal(`
+    <h3>إضافة طالب</h3>
+    <label>الاسم الكامل</label>
+    <input type="text" id="newStudentName">
+    <label>الصف</label>
+    <input type="text" id="newStudentGrade">
+    <label>الرقم</label>
+    <input type="text" id="newStudentNumber">
+    <button class="btn-primary full" onclick="submitNewStudent()">إضافة</button>
+  `);
+}
+async function submitNewStudent(){
+  const full_name = document.getElementById("newStudentName").value.trim();
+  const grade = document.getElementById("newStudentGrade").value.trim();
+  const student_number = document.getElementById("newStudentNumber").value.trim();
+  if (!full_name) return alert("أدخل اسم الطالب");
+  await supabaseClient.from("students").insert({ full_name, grade, student_number, class_id: classesState.currentClassId });
+  closeModal();
+  loadClassStudents(classesState.currentClassId);
+}
+async function deleteStudent(id){
+  if (!confirm("حذف هذا الطالب وكل سجلاته؟")) return;
+  await supabaseClient.from("students").delete().eq("id", id);
+  loadClassStudents(classesState.currentClassId);
 }
 
-async function handleExcelImport(classId) {
+async function handleExcelImport(){
   const fileInput = document.getElementById("excelFile");
-  const statusEl = document.getElementById("importStatus");
   const file = fileInput.files[0];
-  if (!file) { statusEl.textContent = "اختر ملف أولاً"; return; }
-  statusEl.textContent = "جاري القراءة...";
+  if (!file) return alert("اختر ملف إكسل");
   const reader = new FileReader();
   reader.onload = async (e) => {
-    try {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-      const students = [];
-      for (const row of rows) {
-        if (!row || row.length < 3) continue;
-        const [name, grade, number] = row;
-        if (!name || typeof name !== "string") continue;
-        if (name.trim() === "الاسم") continue;
-        students.push({ full_name: String(name).trim(), grade: String(grade || "").trim(), class_name: currentClass.title, student_number: String(number || "").trim(), username: `${grade}${currentClass.title}${number}`.replace(/\s/g, ""), class_id: classId });
-      }
-      if (students.length === 0) { statusEl.textContent = "ما لقينا صفوف صالحة بالملف"; return; }
-      statusEl.textContent = `جاري استيراد ${students.length} طالب...`;
-      const { error } = await supabaseClient.from("students").insert(students);
-      if (error) { statusEl.textContent = "حدث خطأ أثناء الاستيراد: " + error.message; return; }
-      statusEl.textContent = `تم استيراد ${students.length} طالب بنجاح`;
-      fileInput.value = "";
-      await loadClassStudents(classId, "");
-    } catch (err) {
-      statusEl.textContent = "تعذر قراءة الملف، تأكد إنه بصيغة صحيحة";
-    }
+    const wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const toInsert = [];
+    rows.forEach(r => {
+      if (!r || !r[0]) return;
+      if (String(r[0]).trim() === "الاسم") return;
+      toInsert.push({ full_name: String(r[0]).trim(), grade: r[1] ? String(r[1]).trim() : "", student_number: r[2] ? String(r[2]).trim() : "", class_id: classesState.currentClassId });
+    });
+    if (!toInsert.length) return alert("لم يتم العثور على بيانات صالحة");
+    await supabaseClient.from("students").insert(toInsert);
+    alert(`تم استيراد ${toInsert.length} طالب`);
+    loadClassStudents(classesState.currentClassId);
   };
   reader.readAsArrayBuffer(file);
 }
