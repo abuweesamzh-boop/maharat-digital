@@ -1,11 +1,4 @@
 const SESSION_KIND_LABELS = { continuous: "الحصص", written_exam: "الاختبار التحريري", practical_exam: "الاختبار العملي" };
-const WEEKDAY_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-function weekdayNameFromDate(dateStr) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr + "T00:00:00");
-  if (isNaN(d.getTime())) return "";
-  return WEEKDAY_AR[d.getDay()];
-}
 const COMPONENT_DEFS = [
   { key: "participation", label: "المشاركة", target: 10, field: "participation" },
   { key: "homework", label: "الواجبات", target: 10, field: "homework" },
@@ -91,10 +84,8 @@ async function loadGradingKinds() {
         ${!sessions || sessions.length === 0 ? `<div class="empty-state" style="padding:20px;">ما فيه ${kind === "continuous" ? "حصص" : "اختبارات"} مسجلة بعد</div>` : `<div class="session-pill-row">` + sessions.map((s) => `
           <div class="session-pill" onclick="openSessionGrid('${s.id}', '${kind}', ${s.session_number})">
             <div class="del" onclick="event.stopPropagation(); deleteSession('${s.id}')">${icon("close", 11)}</div>
-            <div class="edit-sess" onclick="event.stopPropagation(); openEditSessionModal('${s.id}', '${kind}')">${icon("edit", 11)}</div>
             <div class="num">${kind === "continuous" ? "حصة " + s.session_number : "اختبار " + s.session_number}</div>
             <div class="lbl">${s.session_date ? new Date(s.session_date).toLocaleDateString("ar-SA") : "اضغط للتعديل"}</div>
-            <div class="day">${weekdayNameFromDate(s.session_date)}</div>
           </div>`).join("") + `</div>`}
       </div>`;
   }
@@ -117,43 +108,6 @@ async function deleteSession(sessionId) {
   await loadGradingKinds();
 }
 
-async function openEditSessionModal(sessionId, kind) {
-  const { data: s, error: fetchErr } = await supabaseClient.from("class_sessions").select("*").eq("id", sessionId).single();
-  if (fetchErr || !s) { alert("تعذر تحميل بيانات السجل"); return; }
-  const isContinuous = kind === "continuous";
-  document.getElementById("modalTitle").textContent = `تعديل ${isContinuous ? "الحصة" : "الاختبار"}`;
-  document.getElementById("modalFields").innerHTML = `
-    <div class="field"><label>رقم ${isContinuous ? "الحصة" : "الاختبار"}</label><input type="number" id="es_number" min="1" value="${s.session_number}" required /></div>
-    <div class="field"><label>الفترة</label>
-      <select id="es_period" style="width:100%; background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:10px; padding:11px 12px; color:var(--text-primary); font-family:var(--font-body);">
-        <option value="p1" ${s.period === "p1" ? "selected" : ""}>الفترة الأولى</option>
-        <option value="p2" ${s.period === "p2" ? "selected" : ""}>الفترة الثانية</option>
-      </select>
-    </div>
-    <div class="field"><label>التاريخ</label><input type="date" id="es_date" value="${s.session_date || ""}" /></div>
-    <p style="color:var(--text-muted); font-size:11px;">اليوم: <span id="es_day">${weekdayNameFromDate(s.session_date)}</span></p>
-    <p style="color:var(--text-muted); font-size:11.5px; line-height:1.8;">ملاحظة: نوع السجل (${isContinuous ? "حصة" : "اختبار"}) لا يمكن تغييره بعد الإنشاء — لو احتجت نوع مختلف أنشئ سجل جديد واحذف هذا.</p>`;
-  document.getElementById("es_date").addEventListener("input", (e) => {
-    document.getElementById("es_day").textContent = weekdayNameFromDate(e.target.value);
-  });
-  document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("modalForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const submitBtn = document.getElementById("modalSubmit");
-    submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
-    const session_number = parseInt(document.getElementById("es_number").value, 10);
-    const period = document.getElementById("es_period").value;
-    const session_date = document.getElementById("es_date").value || null;
-    const { error } = await supabaseClient.from("class_sessions").update({ session_number, period, session_date }).eq("id", sessionId);
-    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
-    if (error) { alert("تعذر الحفظ: " + error.message); return; }
-    document.getElementById("modalOverlay").classList.remove("show");
-    if (period !== gradingPeriod) gradingPeriod = period;
-    await loadGradingKinds();
-  };
-  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
-}
-
 const CONTINUOUS_COLS = [
   { field: "participation", label: "المشاركة" }, { field: "homework", label: "الواجبات" },
   { field: "tasks", label: "المهام الأدائية" }, { field: "practical", label: "التطبيق العملي" },
@@ -164,7 +118,7 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
   const contentArea = document.getElementById("contentArea");
   const isContinuous = kind === "continuous";
   if (isContinuous) activeCols = ["participation", "homework", "tasks", "practical"];
-  const { data: students, error: studentsErr } = await supabaseClient.from("students").select("*").eq("class_id", gradingClassId).order("full_name", { ascending: true });
+  const { data: students, error: studentsErr } = await supabaseClient.from("students").select("*").eq("class_id", gradingClassId).order("student_number", { ascending: true });
   if (studentsErr || !students || students.length === 0) {
     contentArea.innerHTML = `<button class="btn-back no-print" onclick="openClass('${gradingClassId}', '${escapeAttr(gradingClassTitle)}')">${icon("back", 15)} رجوع للفصل</button><div class="section-card"><div class="empty-state">ما فيه طلاب بهذا الفصل — أضفهم أولاً</div></div>`;
     return;
@@ -177,7 +131,7 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
   document.getElementById("pageTitle").textContent = `${SESSION_KIND_LABELS[kind]} — ${isContinuous ? "حصة" : "اختبار"} ${sessionNumber}`;
   contentArea.innerHTML = `
     <button class="btn-back no-print" onclick="openClass('${gradingClassId}', '${escapeAttr(gradingClassTitle)}')">${icon("back", 15)} رجوع للفصل</button>
-    <div class="field" style="max-width:220px;"><label>تاريخ ${isContinuous ? "الحصة" : "الاختبار"}</label><input type="date" id="sessionDateInput" value="${currentDate}" /><div style="font-size:11px; color:var(--gold); font-weight:700; margin-top:4px;">اليوم: <span id="sessionDayLabel">${weekdayNameFromDate(currentDate)}</span></div></div>
+    <div class="field" style="max-width:220px;"><label>تاريخ ${isContinuous ? "الحصة" : "الاختبار"}</label><input type="date" id="sessionDateInput" value="${currentDate}" /></div>
     ${isContinuous ? `<div class="column-picker" id="columnPicker">${CONTINUOUS_COLS.map((c) => `<label><input type="checkbox" class="col-check" value="${c.field}" checked /> ${c.label}</label>`).join("")}</div>` : ""}
     <div class="section-card">
       <div class="section-head"><h3>إدخال الدرجات — ${students.length} طالب</h3><button class="btn-add" id="saveGridBtn">${icon("check", 14)} حفظ الكل</button></div>
@@ -185,7 +139,6 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
       <div class="grade-table-wrap"><table class="grade-table" id="gradeTable"><thead><tr id="gradeTableHead"></tr></thead><tbody id="gradeTableBody"></tbody></table></div>
     </div>`;
   document.getElementById("sessionDateInput").addEventListener("change", async (e) => {
-    document.getElementById("sessionDayLabel").textContent = weekdayNameFromDate(e.target.value);
     await supabaseClient.from("class_sessions").update({ session_date: e.target.value }).eq("id", sessionId);
   });
   hydrateIcons(contentArea);
@@ -253,50 +206,15 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
   document.getElementById("saveGridBtn").addEventListener("click", () => saveSessionGrid(sessionId, isContinuous));
 }
 
-function buildNoteChecklistHtml(prefix) {
+function buildNoteSelectHtml(type) {
+  const list = type === "positive" ? POSITIVE_NOTES : NEGATIVE_NOTES;
   return `
-    <div style="max-height:220px; overflow-y:auto; margin-bottom:10px; border:1px solid var(--border-soft); border-radius:10px; padding:8px 10px;">
-      <div style="font-size:11px; font-weight:700; color:var(--success); margin:2px 0 4px;">إيجابية</div>
-      ${POSITIVE_NOTES.map((n) => `<label style="display:flex; align-items:center; gap:7px; font-size:12px; padding:3px 0; cursor:pointer;"><input type="checkbox" class="${prefix}_chk" data-type="positive" value="${escapeAttr(n)}"> ${escapeHtml(n)}</label>`).join("")}
-      <div style="font-size:11px; font-weight:700; color:var(--danger); margin:8px 0 4px;">سلبية</div>
-      ${NEGATIVE_NOTES.map((n) => `<label style="display:flex; align-items:center; gap:7px; font-size:12px; padding:3px 0; cursor:pointer;"><input type="checkbox" class="${prefix}_chk" data-type="negative" value="${escapeAttr(n)}"> ${escapeHtml(n)}</label>`).join("")}
-    </div>
-    <div id="${prefix}_otherHolder">
-      <div class="${prefix}_otherRow" style="display:flex; gap:6px; margin-bottom:6px;">
-        <select class="${prefix}_otherType" style="width:92px; font-size:11px; background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:8px; padding:6px;"><option value="positive">إيجابية</option><option value="negative">سلبية</option></select>
-        <input type="text" class="${prefix}_otherText" placeholder="ملاحظة أخرى (اختياري)" style="flex:1; font-size:12px; padding:7px 10px;">
-      </div>
-    </div>
-    <button type="button" class="btn-secondary" id="${prefix}_addOther" style="width:auto; padding:6px 12px; font-size:11px; margin-bottom:10px;">${icon("plus", 11)} سطر ملاحظة آخر</button>
+    <select id="qn_select" style="width:100%; background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:10px; padding:11px 12px; color:var(--text-primary); font-family:var(--font-body); margin-bottom:10px;">
+      ${list.map((n) => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join("")}
+      <option value="__other__">أخرى (اكتب بنفسك)...</option>
+    </select>
+    <input type="text" id="qn_text" placeholder="اكتب الملاحظة..." style="display:none; margin-bottom:10px;" />
   `;
-}
-function wireOtherRowAdder(prefix, container) {
-  const btn = container.querySelector(`#${prefix}_addOther`);
-  if (btn) hydrateIcons(btn);
-  if (btn) btn.addEventListener("click", () => {
-    const holder = container.querySelector(`#${prefix}_otherHolder`);
-    const row = document.createElement("div");
-    row.className = `${prefix}_otherRow`;
-    row.style.cssText = "display:flex; gap:6px; margin-bottom:6px;";
-    row.innerHTML = `<select class="${prefix}_otherType" style="width:92px; font-size:11px; background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:8px; padding:6px;"><option value="positive">إيجابية</option><option value="negative">سلبية</option></select><input type="text" class="${prefix}_otherText" placeholder="ملاحظة أخرى (اختياري)" style="flex:1; font-size:12px; padding:7px 10px;">`;
-    holder.appendChild(row);
-  });
-}
-function collectChecklistRows(prefix, container, studentId, sessionId) {
-  const rows = [];
-  container.querySelectorAll(`.${prefix}_chk:checked`).forEach((chk) => {
-    rows.push({ student_id: studentId, note_type: chk.dataset.type, note: chk.value, session_id: sessionId || null });
-  });
-  container.querySelectorAll(`.${prefix}_otherRow`).forEach((row) => {
-    const text = row.querySelector(`.${prefix}_otherText`).value.trim();
-    const type = row.querySelector(`.${prefix}_otherType`).value;
-    if (text) rows.push({ student_id: studentId, note_type: type, note: text, session_id: sessionId || null });
-  });
-  return rows;
-}
-function resetChecklist(prefix, container) {
-  container.querySelectorAll(`.${prefix}_chk`).forEach((chk) => (chk.checked = false));
-  container.querySelectorAll(`.${prefix}_otherText`).forEach((inp) => (inp.value = ""));
 }
 
 function openQuickNotePopover(event, studentId, studentName, sessionId) {
@@ -307,31 +225,41 @@ function openQuickNotePopover(event, studentId, studentName, sessionId) {
   pop.className = "quick-note-popover";
   pop.style.top = (rect.bottom + window.scrollY + 6) + "px";
   pop.style.left = (rect.left + window.scrollX - 100) + "px";
-  pop.style.maxHeight = "70vh";
-  pop.style.overflowY = "auto";
   pop.innerHTML = `
-    <div style="font-size:12px; font-weight:700; margin-bottom:10px;">ملاحظات: ${escapeHtml(studentName)}</div>
-    <p style="font-size:10.5px; color:var(--text-muted); margin:0 0 8px;">حدد كل الملاحظات اللي تنطبق على الطالب بهذه الحصة، ثم اضغط حفظ الكل.</p>
-    ${buildNoteChecklistHtml("qn")}
-    <div id="qn_status" style="font-size:11px; color:var(--success); min-height:14px; margin-bottom:6px;"></div>
-    <div style="display:flex; gap:8px;"><button type="button" class="btn-secondary" id="qn_close" style="width:auto; padding:8px 14px;">تم / إغلاق</button><button type="button" class="btn-add" id="qn_save" style="flex:1;">حفظ الكل</button></div>`;
+    <div style="font-size:12px; font-weight:700; margin-bottom:10px;">ملاحظة سريعة: ${escapeHtml(studentName)}</div>
+    <div class="btn-pill-choice" style="margin-bottom:10px;"><button type="button" class="positive active" data-type="positive" style="padding:8px;">إيجابية</button><button type="button" class="negative" data-type="negative" style="padding:8px;">سلبية</button></div>
+    <div id="qn_selectHolder">${buildNoteSelectHtml("positive")}</div>
+    <div style="display:flex; gap:8px;"><button type="button" class="btn-secondary" id="qn_cancel" style="width:auto; padding:8px 14px;">إلغاء</button><button type="button" class="btn-add" id="qn_save" style="flex:1;">حفظ</button></div>`;
   document.body.appendChild(pop);
-  wireOtherRowAdder("qn", pop);
 
-  pop.querySelector("#qn_close").addEventListener("click", () => pop.remove());
+  let noteType = "positive";
+  function wireSelect() {
+    const sel = pop.querySelector("#qn_select");
+    const txt = pop.querySelector("#qn_text");
+    sel.addEventListener("change", () => { txt.style.display = sel.value === "__other__" ? "" : "none"; });
+  }
+  wireSelect();
+  pop.querySelectorAll(".btn-pill-choice button").forEach((b) => {
+    b.addEventListener("click", () => {
+      pop.querySelectorAll(".btn-pill-choice button").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active"); noteType = b.dataset.type;
+      pop.querySelector("#qn_selectHolder").innerHTML = buildNoteSelectHtml(noteType);
+      wireSelect();
+    });
+  });
+  pop.querySelector("#qn_cancel").addEventListener("click", () => pop.remove());
   pop.querySelector("#qn_save").addEventListener("click", async () => {
-    const rows = collectChecklistRows("qn", pop, studentId, sessionId);
-    if (!rows.length) { pop.querySelector("#qn_status").textContent = "ما تم تحديد أي ملاحظة."; pop.querySelector("#qn_status").style.color = "var(--text-muted)"; return; }
+    const sel = pop.querySelector("#qn_select");
+    const txtInput = pop.querySelector("#qn_text");
+    const text = sel.value === "__other__" ? txtInput.value.trim() : sel.value;
+    if (!text) return;
     const saveBtn = pop.querySelector("#qn_save");
     saveBtn.disabled = true; saveBtn.textContent = "...";
-    const { error } = await supabaseClient.from("behavior_notes").insert(rows);
-    saveBtn.disabled = false; saveBtn.textContent = "حفظ الكل";
-    if (error) { alert("تعذر الحفظ"); return; }
+    const { error } = await supabaseClient.from("behavior_notes").insert({ student_id: studentId, note_type: noteType, note: text, session_id: sessionId || null });
+    if (error) { alert("تعذر الحفظ"); saveBtn.disabled = false; saveBtn.textContent = "حفظ"; return; }
     const btnEl = document.querySelector(`.quick-note-btn[data-student="${studentId}"]`);
     if (btnEl) btnEl.classList.add("has-note");
-    resetChecklist("qn", pop);
-    pop.querySelector("#qn_status").style.color = "var(--success)";
-    pop.querySelector("#qn_status").textContent = `تم الحفظ ✓ (${rows.length} ملاحظة) — تقدر تضيف المزيد`;
+    pop.remove();
   });
   setTimeout(() => {
     document.addEventListener("click", function closeOnOutside(e) {
@@ -504,35 +432,41 @@ async function loadBehaviorNotes() {
 }
 
 function openAddBehaviorModal() {
-  document.getElementById("modalTitle").textContent = "إضافة ملاحظات سلوك";
+  document.getElementById("modalTitle").textContent = "إضافة ملاحظة سلوك";
   document.getElementById("modalFields").innerHTML = `
-    <p style="font-size:11.5px; color:var(--text-muted); margin:0 0 8px;">حدد كل الملاحظات اللي تنطبق على الطالب، ثم اضغط حفظ الكل. تقدر تضيف دفعات متعددة بدون ما تسكر النافذة.</p>
-    ${buildNoteChecklistHtml("bh")}
-    <div id="bh_status" style="font-size:11px; color:var(--success); min-height:14px;"></div>`;
-  wireOtherRowAdder("bh", document.getElementById("modalFields"));
-  document.getElementById("modalSubmit").textContent = "حفظ الكل";
-  document.getElementById("modalCancel").textContent = "تم / إغلاق";
+    <div class="btn-pill-choice"><button type="button" class="positive active" data-type="positive">إيجابية</button><button type="button" class="negative" data-type="negative">سلبية</button></div>
+    <div id="bh_selectHolder">${buildNoteSelectHtml("positive")}</div>`;
+  let noteType = "positive";
+  function wireSelect() {
+    const sel = document.getElementById("qn_select");
+    const txt = document.getElementById("qn_text");
+    if (sel) sel.addEventListener("change", () => { txt.style.display = sel.value === "__other__" ? "" : "none"; });
+  }
+  wireSelect();
+  document.querySelectorAll(".btn-pill-choice button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".btn-pill-choice button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active"); noteType = btn.dataset.type;
+      document.getElementById("bh_selectHolder").innerHTML = buildNoteSelectHtml(noteType);
+      wireSelect();
+    });
+  });
   document.getElementById("modalOverlay").classList.add("show");
   document.getElementById("modalForm").onsubmit = async (e) => {
     e.preventDefault();
-    const rows = collectChecklistRows("bh", document.getElementById("modalFields"), reportStudent.id, null);
-    const statusEl = document.getElementById("bh_status");
-    if (!rows.length) { statusEl.style.color = "var(--text-muted)"; statusEl.textContent = "ما تم تحديد أي ملاحظة."; return; }
+    const sel = document.getElementById("qn_select");
+    const txtInput = document.getElementById("qn_text");
+    const note = sel.value === "__other__" ? txtInput.value.trim() : sel.value;
+    if (!note) return;
     const submitBtn = document.getElementById("modalSubmit");
     submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
-    const { error } = await supabaseClient.from("behavior_notes").insert(rows);
-    submitBtn.disabled = false; submitBtn.textContent = "حفظ الكل";
+    const { error } = await supabaseClient.from("behavior_notes").insert({ student_id: reportStudent.id, note_type: noteType, note });
+    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
     if (error) { alert("تعذر الحفظ"); return; }
-    resetChecklist("bh", document.getElementById("modalFields"));
-    statusEl.style.color = "var(--success)";
-    statusEl.textContent = `تم الحفظ ✓ (${rows.length} ملاحظة) — تقدر تضيف المزيد`;
+    document.getElementById("modalOverlay").classList.remove("show");
     await loadBehaviorNotes();
   };
-  document.getElementById("modalCancel").onclick = () => {
-    document.getElementById("modalOverlay").classList.remove("show");
-    document.getElementById("modalSubmit").textContent = "حفظ";
-    document.getElementById("modalCancel").textContent = "إلغاء";
-  };
+  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
 }
 
 async function deleteBehaviorNote(id) {
@@ -579,7 +513,7 @@ async function renderClassReport(classId, classTitle) {
 async function loadClassReportBody(classId, period, classTitle) {
   const body = document.getElementById("classReportBody");
   body.innerHTML = `<tr><td colspan="10" class="empty-state">جاري التحميل...</td></tr>`;
-  const { data: students } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("full_name", { ascending: true });
+  const { data: students } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
   if (!students || students.length === 0) { body.innerHTML = `<tr><td colspan="10" class="empty-state">ما فيه طلاب بهذا الفصل</td></tr>`; return; }
   const rowsData = await Promise.all(students.map(async (st) => {
     const r = await fetchStudentResults(st.id, period);
@@ -694,7 +628,7 @@ function levelCellHtml(c) {
 async function loadTeacherReportBody(classId, period, classTitle) {
   const body = document.getElementById("teacherReportBody");
   body.innerHTML = `<tr><td colspan="11" class="empty-state">جاري التحميل...</td></tr>`;
-  const { data: students } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("full_name", { ascending: true });
+  const { data: students } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
   if (!students || students.length === 0) { body.innerHTML = `<tr><td colspan="11" class="empty-state">ما فيه طلاب بهذا الفصل</td></tr>`; return; }
   const { data: allNotes } = await supabaseClient.from("behavior_notes").select("*").in("student_id", students.map((s) => s.id));
   const rowsData = await Promise.all(students.map(async (st) => {
@@ -750,7 +684,7 @@ async function printClassQRCodes(classId, classTitle) {
   const win = window.open("", "_blank");
   win.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>باركودات ${escapeHtml(classTitle)}</title></head><body style="font-family:Tajawal, Arial, sans-serif; padding:40px; text-align:center;"><h2>جاري تجهيز الباركودات...</h2></body></html>`);
   win.document.close();
-  const { data: students, error } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("full_name", { ascending: true });
+  const { data: students, error } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
   if (error || !students || students.length === 0) { win.document.body.innerHTML = "<h2>ما فيه طلاب بهذا الفصل</h2>"; return; }
   const missing = students.filter((s) => !s.parent_token);
   for (const st of missing) {

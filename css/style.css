@@ -206,10 +206,6 @@ body { font-family: var(--font-body); background: var(--bg-deep); color: var(--t
 .session-pill .del { position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; border-radius: 6px; background: var(--bg-surface-2); color: var(--text-muted); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
 .session-pill:hover .del { opacity: 1; }
 .session-pill .del:hover { color: var(--danger); }
-.session-pill .edit-sess { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 6px; background: var(--bg-surface-2); color: var(--text-muted); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
-.session-pill:hover .edit-sess { opacity: 1; }
-.session-pill .edit-sess:hover { color: var(--navy); }
-.session-pill .day { font-size: 10px; color: var(--gold); font-weight: 700; margin-top: 2px; }
 
 .period-toggle { display: inline-flex; background: var(--bg-surface); border: 1px solid var(--border-soft); border-radius: 10px; padding: 4px; gap: 4px; margin-bottom: 18px; }
 .period-toggle button { border: none; background: transparent; color: var(--text-muted); padding: 9px 18px; border-radius: 8px; font-family: var(--font-body); font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.15s, color 0.15s; }

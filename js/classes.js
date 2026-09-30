@@ -26,7 +26,7 @@ async function renderClassesSection() {
 async function globalStudentSearch(query) {
   const resultsEl = document.getElementById("globalSearchResults");
   if (!query || query.trim().length < 2) { resultsEl.innerHTML = ""; return; }
-  const { data, error } = await supabaseClient.from("students").select("*, classes(title)").ilike("full_name", `%${query.trim()}%`).order("full_name", { ascending: true }).limit(10);
+  const { data, error } = await supabaseClient.from("students").select("*, classes(title)").ilike("full_name", `%${query.trim()}%`).limit(10);
   if (error || !data || data.length === 0) { resultsEl.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه نتائج</div>`; return; }
   resultsEl.innerHTML = data.map((s) => `<div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}')"><div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">${s.classes ? escapeHtml(s.classes.title) : "بدون فصل"} · الصف ${escapeHtml(s.grade)}</div></div><div class="actions"><span class="icon-btn">${icon("back", 14)}</span></div></div>`).join("");
 }
@@ -170,14 +170,14 @@ async function openClass(classId, title) {
 async function searchWithinClassInline(classId, query) {
   const holder = document.getElementById("searchInlineResults");
   if (!query || query.trim().length < 1) { holder.innerHTML = ""; return; }
-  const { data, error } = await supabaseClient.from("students").select("*").eq("class_id", classId).ilike("full_name", `%${query.trim()}%`).order("full_name", { ascending: true });
+  const { data, error } = await supabaseClient.from("students").select("*").eq("class_id", classId).ilike("full_name", `%${query.trim()}%`);
   if (error || !data || data.length === 0) { holder.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه نتائج</div>`; return; }
   holder.innerHTML = data.map((s) => `<div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}', {id:'${classId}', title:'${escapeAttr(currentClass.title)}'})"><div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">الصف ${escapeHtml(s.grade)} · رقم ${escapeHtml(s.student_number)}</div></div><div class="actions"><span class="icon-btn">${icon("back", 14)}</span></div></div>`).join("");
 }
 
 async function loadClassStudents(classId, query) {
   const holder = document.getElementById("studentsHolder");
-  let q = supabaseClient.from("students").select("*").eq("class_id", classId).order("full_name", { ascending: true });
+  let q = supabaseClient.from("students").select("*").eq("class_id", classId).order("student_number");
   if (query && query.trim()) q = q.ilike("full_name", `%${query.trim()}%`);
   const { data, error } = await q;
   if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }

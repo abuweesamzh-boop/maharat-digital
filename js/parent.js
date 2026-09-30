@@ -1,6 +1,3 @@
-const pParams = new URLSearchParams(window.location.search);
-const pToken = pParams.get("token");
-
 const COMPONENT_DEFS_P = [
   { key: "participation", label: "المشاركة", target: 10, field: "participation" },
   { key: "homework", label: "الواجبات", target: 10, field: "homework" },
@@ -9,57 +6,93 @@ const COMPONENT_DEFS_P = [
   { key: "written_exam", label: "الاختبار التحريري", target: 30, field: "exam_score" },
   { key: "practical_exam", label: "الاختبار العملي", target: 30, field: "exam_score" },
 ];
-function classifyLevelP(avg, target){
-  const pct = (avg/target)*100;
-  if (pct >= 80) return { cls:"positive", label:"مستوى جيد" };
-  if (pct >= 60) return { cls:"mid", label:"يحتاج تحسين" };
-  return { cls:"negative", label:"يحتاج متابعة عاجلة" };
+
+let PDATA = null;
+let pPeriod = "p1";
+
+function escapeHtmlP(str) { const d = document.createElement("div"); d.textContent = str || ""; return d.innerHTML; }
+function classifyLevelP(avg, target) {
+  const pct = target > 0 ? (avg / target) * 100 : 0;
+  if (pct >= 80) return { cls: "positive", label: "مستوى جيد" };
+  if (pct >= 60) return { cls: "mid", label: "يحتاج تحسين" };
+  return { cls: "negative", label: "يحتاج متابعة عاجلة" };
 }
 
-async function initParent(){
-  const el = document.getElementById("contentArea");
-  if (!pToken) { el.innerHTML = `<p class="muted">رابط غير صالح.</p>`; return; }
-  const { data, error } = await supabaseClient.rpc("get_student_public_report", { p_token: pToken });
-  if (error || !data) { el.innerHTML = `<p class="muted">الرابط منتهي أو غير صالح.</p>`; return; }
-  renderParentReport(data);
+async function initParent() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+  const contentEl = document.getElementById("parentContent");
+  if (!token) { contentEl.innerHTML = `<div class="section-card"><div class="empty-state">رابط غير صالح.</div></div>`; return; }
+  const { data, error } = await supabaseClient.rpc("get_student_public_report", { p_token: token });
+  if (error || !data) { contentEl.innerHTML = `<div class="section-card"><div class="empty-state">هذا الرمز غير صالح.</div></div>`; return; }
+  PDATA = data;
+  renderParentReport();
 }
 
-function renderParentReport(data){
-  const el = document.getElementById("contentArea");
-  const scores = data.session_scores || [];
-  const results = {};
-  COMPONENT_DEFS_P.forEach(c => {
-    const vals = scores.filter(r => r.class_sessions?.session_kind === c.key && r[c.field] != null).map(r => Number(r[c.field]));
-    results[c.key] = { avg: vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0, target: c.target };
+function computeResults(period) {
+  const scores = (PDATA.session_scores || []).filter((sc) => sc.class_sessions && sc.class_sessions.period === period);
+  const results = COMPONENT_DEFS_P.map((def) => {
+    const relevant = scores.filter((sc) => {
+      const kind = sc.class_sessions.session_kind;
+      if (def.key === "written_exam") return kind === "written_exam";
+      if (def.key === "practical_exam") return kind === "practical_exam";
+      return kind === "continuous";
+    });
+    const values = relevant.map((sc) => sc[def.field]).filter((v) => v !== null && v !== undefined);
+    const avg = values.length > 0 ? values.reduce((a, b) => a + Number(b), 0) / values.length : 0;
+    return { ...def, avg: Math.round(avg * 100) / 100, count: values.length };
   });
-  const continuous = ["participation","homework","tasks","practical"].reduce((s,k)=>s+results[k].avg,0);
-  const exams = ["written_exam","practical_exam"].reduce((s,k)=>s+results[k].avg,0);
-  const total = continuous + exams;
-  const totalSessions = scores.length;
-  const presentCount = scores.filter(r=>r.attendance!==false).length;
-  const attendanceRate = totalSessions ? Math.round((presentCount/totalSessions)*100) : 100;
-  const notes = data.behavior_notes || [];
+  const total = Math.round(results.reduce((s, r) => s + r.avg, 0) * 100) / 100;
+  const continuousScores = scores.filter((sc) => sc.class_sessions.session_kind === "continuous");
+  const presentCount = continuousScores.filter((sc) => sc.attendance !== false).length;
+  const attendanceRate = continuousScores.length > 0 ? Math.round((presentCount / continuousScores.length) * 100) : null;
+  return { results, total, attendanceRate, presentCount, totalSessions: continuousScores.length };
+}
 
-  el.innerHTML = `
-    <div class="page-head"><h2>تقرير الطالب: ${data.student.full_name}</h2><p class="muted">${data.student.class_title||''}</p></div>
-    <div class="stats-grid">
-      <div class="stat-card"><div><strong>${total.toFixed(1)}</strong><span>الإجمالي/100</span></div></div>
-      <div class="stat-card"><div><strong>${continuous.toFixed(1)}</strong><span>أعمال السنة/40</span></div></div>
-      <div class="stat-card"><div><strong>${exams.toFixed(1)}</strong><span>الاختبارات/60</span></div></div>
-      <div class="stat-card"><div><strong>${attendanceRate}%</strong><span>نسبة الحضور</span></div></div>
+function renderParentReport() {
+  const contentEl = document.getElementById("parentContent");
+  const student = PDATA.student;
+  contentEl.innerHTML = `
+    <div class="section-card" style="margin-bottom:18px;">
+      <div style="font-family:var(--font-display); font-weight:800; font-size:19px;">${escapeHtmlP(student.full_name)}</div>
+      <div style="color:var(--text-muted); font-size:13px;">${student.class_title ? escapeHtmlP(student.class_title) : ""}</div>
     </div>
-    <div class="component-grid">
-      ${COMPONENT_DEFS_P.map(c=>{
-        const r = results[c.key]; const lvl = classifyLevelP(r.avg, c.target);
-        return `<div class="component-card lvl-${lvl.cls}"><strong>${c.label}</strong><span>${r.avg.toFixed(1)} / ${c.target}</span><span class="lvl-tag">${lvl.label}</span></div>`;
-      }).join("")}
+    <div class="period-toggle" id="pPeriodToggle"><button data-p="p1" class="active">الفترة الأولى</button><button data-p="p2">الفترة الثانية</button></div>
+    <div id="pReportBody"></div>
+    <div class="section-card" style="margin-top:20px;"><div class="section-head"><h3>ملاحظات السلوك</h3></div><div id="pBehaviorList"></div></div>
+  `;
+  document.querySelectorAll("#pPeriodToggle button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      pPeriod = btn.dataset.p;
+      document.querySelectorAll("#pPeriodToggle button").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      fillReportBody();
+    });
+  });
+  fillReportBody();
+  fillBehaviorNotes();
+}
+
+function fillReportBody() {
+  const r = computeResults(pPeriod);
+  const continuousTotal = Math.round((r.results[0].avg + r.results[1].avg + r.results[2].avg + r.results[3].avg) * 100) / 100;
+  const examsTotal = Math.round((r.results[4].avg + r.results[5].avg) * 100) / 100;
+  document.getElementById("pReportBody").innerHTML = `
+    <div class="stat-grid" style="margin-bottom:18px;">
+      <div class="stat-card"><div class="num">${r.total}</div><div class="lbl">الدرجة الإجمالية من 100</div></div>
+      <div class="stat-card"><div class="num">${continuousTotal}</div><div class="lbl">مجموع أعمال السنة من 40</div></div>
+      <div class="stat-card"><div class="num">${examsTotal}</div><div class="lbl">مجموع الاختبارات من 60</div></div>
+      <div class="stat-card"><div class="num">${r.attendanceRate !== null ? r.attendanceRate + "%" : "—"}</div><div class="lbl">نسبة الحضور (${r.presentCount}/${r.totalSessions})</div></div>
     </div>
-    <div class="section-block">
-      <h3>ملاحظات السلوك</h3>
-      <div class="items-list">${notes.length ? notes.map(n=>`
-        <div class="item-row"><div class="item-main"><span class="note-dot ${n.note_type}"></span><span>${n.note}</span></div></div>
-      `).join("") : `<p class="muted">لا توجد ملاحظات.</p>`}</div>
-    </div>
+    <div class="component-ring-grid">${r.results.map((c) => { const lvl = classifyLevelP(c.avg, c.target); return `<div class="component-mini-card"><div class="val">${c.avg}</div><div class="of">من ${c.target}</div><div class="lbl">${c.label}</div><div style="font-size:11px; margin-top:6px; font-weight:700;" class="lvl-${lvl.cls}">${lvl.label}</div></div>`; }).join("")}</div>
   `;
 }
-document.addEventListener("DOMContentLoaded", initParent);
+
+function fillBehaviorNotes() {
+  const notes = (PDATA.behavior_notes || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const holder = document.getElementById("pBehaviorList");
+  if (notes.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه ملاحظات</div>`; return; }
+  holder.innerHTML = notes.map((n) => `<div class="behavior-note ${n.note_type}"><div><div class="txt"><span class="dot-badge ${n.note_type}"></span> ${escapeHtmlP(n.note)}</div><div class="date">${new Date(n.created_at).toLocaleDateString("ar-SA")}</div></div></div>`).join("");
+}
+
+initParent();
