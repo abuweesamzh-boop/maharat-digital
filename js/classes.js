@@ -1,4 +1,4 @@
-const CLASS_COLORS = ["#0F2542", "#B8862E", "#3C6E5A", "#7A4B8A", "#1F6F8B", "#8A4B3C"];
+const CLASS_COLORS = ["#6D54E0", "#E0607A", "#1FA873", "#F2A33E", "#2E7CF2", "#8B5FE0"];
 let currentClass = null;
 
 async function renderClassesSection() {
