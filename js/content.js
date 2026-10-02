@@ -77,7 +77,9 @@ async function loadDashboardStats() {
     return count ?? 0;
   }));
   const total = counts.reduce((a, b) => a + b, 0);
-  holder.innerHTML = `<div class="stat-card"><div class="num">${total}</div><div class="lbl">إجمالي كل المرفقات</div></div>${roots.map((r, i) => `<div class="stat-card"><div class="num">${counts[i]}</div><div class="lbl">${escapeHtml(r.title)}</div></div>`).join("")}`;
+  holder.className = "";
+  const segments = roots.map((r, i) => ({ value: counts[i], color: colorFor(i), label: r.title }));
+  holder.innerHTML = buildDonutWidget(segments, { centerLabel: "إجمالي المرفقات" });
 }
 
 async function loadSubFolders(parentId) {

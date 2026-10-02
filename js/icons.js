@@ -38,3 +38,54 @@ function icon(name, size) {
   const svg = ICONS[name] || "";
   return `<span class="ic-wrap" style="width:${size}px; height:${size}px;">${svg}</span>`;
 }
+
+// ============================================
+// دائرة دونات (Donut Chart) — مكوّن مشترك لعرض توزيع الأعداد بألوان
+// ============================================
+function buildDonutSVG(segments, opts) {
+  opts = opts || {};
+  const size = opts.size || 176;
+  const strokeWidth = opts.strokeWidth || 20;
+  const r = (size - strokeWidth) / 2;
+  const cx = size / 2, cy = size / 2;
+  const circumference = 2 * Math.PI * r;
+  const total = segments.reduce((a, s) => a + (s.value || 0), 0);
+  if (total <= 0) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border-soft)" stroke-width="${strokeWidth}"></circle></svg>`;
+  }
+  let acc = 0;
+  const arcs = segments.filter((s) => s.value > 0).map((s) => {
+    const frac = s.value / total;
+    const dash = Math.max(frac * circumference - 1.5, 0);
+    const gap = circumference - dash;
+    const rotate = (acc / total) * 360 - 90;
+    acc += s.value;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-dasharray="${dash} ${gap}" transform="rotate(${rotate} ${cx} ${cy})"></circle>`;
+  }).join("");
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${arcs}</svg>`;
+}
+
+function buildDonutWidget(segments, opts) {
+  opts = opts || {};
+  const size = opts.size || 176;
+  const total = segments.reduce((a, s) => a + (s.value || 0), 0);
+  const svg = buildDonutSVG(segments, opts);
+  const esc = (typeof escapeHtml === "function") ? escapeHtml : (s) => s;
+  const legend = segments.map((s) => `
+    <div style="display:flex; align-items:center; gap:9px; font-size:12.5px;">
+      <span style="width:10px; height:10px; border-radius:50%; background:${s.color}; flex-shrink:0;"></span>
+      <span style="flex:1; color:var(--text-primary);">${esc(s.label)}</span>
+      <span style="font-weight:800; color:var(--text-muted); font-family:var(--font-display);">${s.value}</span>
+    </div>`).join("");
+  return `
+    <div style="display:flex; align-items:center; gap:28px; flex-wrap:wrap;">
+      <div style="position:relative; width:${size}px; height:${size}px; flex-shrink:0;">
+        ${svg}
+        <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+          <div style="font-family:var(--font-display); font-size:28px; font-weight:800; color:var(--text-primary);">${total}</div>
+          <div style="font-size:11px; color:var(--text-muted);">${opts.centerLabel || "الإجمالي"}</div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:11px; min-width:170px; flex:1;">${legend}</div>
+    </div>`;
+}

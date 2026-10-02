@@ -18,9 +18,33 @@ async function renderShareLinksSection() {
       </div>
       <div id="newLinkResult" style="margin-top:16px;"></div>
     </div>
+    <div class="section-card" style="margin-bottom:20px;" id="shareLinksStatsCard">
+      <div class="section-head"><h3>${icon("chart")} لوحة إحصائيات الروابط</h3></div>
+      <div id="shareLinksStatsHolder"><div class="empty-state">جاري الحساب...</div></div>
+    </div>
     <div class="section-card"><div class="section-head"><h3>الروابط الحالية</h3></div><div id="linksListHolder"><div class="empty-state">جاري التحميل...</div></div></div>`;
+  hydrateIcons(document.getElementById("shareLinksStatsCard"));
   document.getElementById("generateLinkBtn").addEventListener("click", generateShareLink);
   await loadShareLinks();
+}
+
+function renderShareLinksStats(data) {
+  const holder = document.getElementById("shareLinksStatsHolder");
+  if (!holder) return;
+  if (!data || data.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه روابط مولّدة بعد</div>`; return; }
+  const now = new Date();
+  let active = 0, expired = 0, revoked = 0;
+  data.forEach((link) => {
+    if (link.revoked) revoked++;
+    else if (new Date(link.expires_at) < now) expired++;
+    else active++;
+  });
+  const segments = [
+    { value: active, color: "#1FA873", label: "نشطة" },
+    { value: expired, color: "#F2A33E", label: "منتهية الصلاحية" },
+    { value: revoked, color: "#C23A58", label: "أُلغيت يدوياً" },
+  ];
+  holder.innerHTML = buildDonutWidget(segments, { centerLabel: "كل الروابط" });
 }
 
 async function generateShareLink() {
@@ -54,6 +78,7 @@ async function loadShareLinks() {
   const holder = document.getElementById("linksListHolder");
   const { data, error } = await supabaseClient.from("share_links").select("*").order("created_at", { ascending: false });
   if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
+  renderShareLinksStats(data);
   if (!data || data.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه روابط مولّدة بعد</div>`; return; }
   const now = new Date();
   holder.innerHTML = data.map((link) => {
