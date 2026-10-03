@@ -43,6 +43,7 @@ async function loadClasses() {
         <button class="folder-mini-btn" onclick="event.stopPropagation(); openEditClassModal('${c.id}', '${escapeAttr(c.title)}')" title="تعديل">${icon("edit", 14)}</button>
         <button class="folder-mini-btn danger" onclick="event.stopPropagation(); deleteClass('${c.id}')" title="حذف">${icon("trash", 14)}</button>
       </div>
+      <div class="folder-icon-badge">${icon("users", 22)}</div>
       <div class="folder-title">${escapeHtml(c.title)}</div>
       <div class="folder-meta">${counts[i].count ?? 0} طالب</div>
     </div>`).join("");

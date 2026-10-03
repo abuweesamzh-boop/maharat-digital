@@ -29,10 +29,10 @@ async function loadHomeStats() {
   const contentArea = document.getElementById("contentArea");
   contentArea.innerHTML = `
     <div class="stat-grid" id="statGrid">
-      <div class="stat-card"><div class="num">–</div><div class="lbl">عناصر ملف الإنجاز</div></div>
-      <div class="stat-card"><div class="num">–</div><div class="lbl">الطلاب المسجلين</div></div>
-      <div class="stat-card"><div class="num">–</div><div class="lbl">الفصول الدراسية</div></div>
-      <div class="stat-card"><div class="num">–</div><div class="lbl">روابط الصفوف</div></div>
+      <div class="stat-card"><div class="stat-icon-badge">${icon("folder", 20)}</div><div class="num">–</div><div class="lbl">عناصر ملف الإنجاز</div></div>
+      <div class="stat-card"><div class="stat-icon-badge">${icon("users", 20)}</div><div class="num">–</div><div class="lbl">الطلاب المسجلين</div></div>
+      <div class="stat-card"><div class="stat-icon-badge">${icon("list", 20)}</div><div class="num">–</div><div class="lbl">الفصول الدراسية</div></div>
+      <div class="stat-card"><div class="stat-icon-badge">${icon("link", 20)}</div><div class="num">–</div><div class="lbl">روابط الصفوف</div></div>
     </div>
     <div class="section-card"><div class="section-head"><h3>مرحباً، ${currentProfile.full_name}</h3></div><p style="color:var(--text-muted); font-size:14px; line-height:1.9;">استخدم القائمة الجانبية للتنقل بين الأقسام.</p></div>`;
   if (currentProfile.role === "teacher") {

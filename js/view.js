@@ -6,6 +6,16 @@ let viewCurrentClass = null;
 let viewReportPeriod = "p1";
 
 const MODULE_LABELS_VIEW = { portfolio: "ملف إنجاز المعلم", external: "مهارات رقمية - الصفوف" };
+const FOLDER_COLORS_VIEW = ["#6D54E0", "#E0607A", "#1FA873", "#F2A33E", "#2E7CF2", "#8B5FE0", "#C23A58", "#1FA8A8"];
+function colorForView(i) { return FOLDER_COLORS_VIEW[i % FOLDER_COLORS_VIEW.length]; }
+function getDescendantSectionIdsView(rootId) {
+  let ids = []; let frontier = [rootId];
+  while (frontier.length > 0) {
+    const children = (SHARED.content_sections || []).filter((s) => frontier.includes(s.parent_id)).map((s) => s.id);
+    ids = ids.concat(children); frontier = children;
+  }
+  return ids;
+}
 const COMPONENT_DEFS_VIEW = [
   { key: "participation", label: "المشاركة", target: 10, field: "participation" },
   { key: "homework", label: "الواجبات", target: 10, field: "homework" },
@@ -78,9 +88,8 @@ function renderExtLinksViewTab() {
   const body = document.getElementById("viewTabBody");
   const links = SHARED.external_links || [];
   if (links.length === 0) { body.innerHTML = `<div class="section-card"><div class="empty-state">ما فيه روابط مضافة بعد</div></div>`; return; }
-  const colors = ["#0F2542", "#B8862E", "#3C6E5A", "#7A4B8A", "#1F6F8B", "#8A4B3C"];
   body.innerHTML = `<div class="section-card"><div class="section-head"><h3>الصفوف الدراسية</h3></div><div class="folder-grid">
-    ${links.map((l, i) => `<div class="folder-card" style="--folder-color:${colors[(l.color_index ?? i) % colors.length]}" onclick="window.open('${l.url}', '_blank')">${l.image_url ? `<img src="${l.image_url}" style="width:40px; height:40px; border-radius:10px; object-fit:cover; margin-bottom:10px;" />` : ""}<div class="folder-title">${escapeHtml(l.title)}</div><div class="folder-meta">${icon("link", 12)} فتح الرابط</div></div>`).join("")}
+    ${links.map((l, i) => `<div class="folder-card" style="--folder-color:${colorForView(l.color_index ?? i)}" onclick="window.open('${l.url}', '_blank')">${l.image_url ? `<img src="${l.image_url}" style="width:44px; height:44px; border-radius:12px; object-fit:cover; margin-bottom:14px;" />` : `<div class="folder-icon-badge">${icon("link", 22)}</div>`}<div class="folder-title">${escapeHtml(l.title)}</div><div class="folder-meta">${icon("link", 12)} فتح الرابط</div></div>`).join("")}
   </div></div>`;
 }
 
@@ -92,7 +101,7 @@ function renderTrackingTab() {
   body.innerHTML = `<div class="section-card"><div class="section-head"><h3>الفصول</h3></div><div class="folder-grid">
     ${classes.map((c, i) => {
       const studentsCount = (SHARED.students || []).filter((s) => s.class_id === c.id).length;
-      return `<div class="folder-card" style="--folder-color:${["#0F2542","#B8862E","#3C6E5A","#7A4B8A","#1F6F8B","#8A4B3C"][i % 6]}" onclick="openViewClass('${c.id}', '${escapeAttr(c.title)}')"><div class="folder-title">${escapeHtml(c.title)}</div><div class="folder-meta">${studentsCount} طالب</div></div>`;
+      return `<div class="folder-card" style="--folder-color:${colorForView(i)}" onclick="openViewClass('${c.id}', '${escapeAttr(c.title)}')"><div class="folder-icon-badge">${icon("users", 22)}</div><div class="folder-title">${escapeHtml(c.title)}</div><div class="folder-meta">${studentsCount} طالب</div></div>`;
     }).join("")}
   </div></div>`;
 }
@@ -185,10 +194,23 @@ function renderFolderLevel() {
   const breadcrumbHtml = `<div class="breadcrumb-nav"><span class="crumb ${viewNavStack.length === 0 ? "current" : ""}" onclick="viewNavStack=[]; renderFolderLevel();">${MODULE_LABELS_VIEW[viewCurrentModule]}</span>${viewNavStack.map((n, i) => `<span>/</span><span class="crumb ${i === viewNavStack.length - 1 ? "current" : ""}" onclick="viewNavStack=viewNavStack.slice(0,${i + 1}); renderFolderLevel();">${escapeHtml(n.title)}</span>`).join("")}</div>`;
   const subs = (SHARED.content_sections || []).filter((s) => s.module === viewCurrentModule && (parentId ? s.parent_id === parentId : !s.parent_id));
   const items = parentId ? (SHARED.content_items || []).filter((i) => i.section_id === parentId) : [];
+
+  let statsHtml = "";
+  if (!parentId) {
+    const roots = subs;
+    const counts = roots.map((r) => {
+      const allIds = [r.id, ...getDescendantSectionIdsView(r.id)];
+      return (SHARED.content_items || []).filter((i) => allIds.includes(i.section_id)).length;
+    });
+    const total = counts.reduce((a, b) => a + b, 0);
+    statsHtml = roots.length === 0 ? "" : `<div class="section-card" style="margin-bottom:18px;"><div class="section-head"><h3>${icon("chart")} لوحة إحصائيات المرفقات</h3></div>${buildDonutWidget(roots.map((r, i) => ({ value: counts[i], color: colorForView(i), label: r.title })), { centerLabel: "إجمالي المرفقات" })}</div>`;
+  }
+
   body.innerHTML = `
     ${breadcrumbHtml}
+    ${statsHtml}
     <div class="section-card" style="margin-bottom:18px;"><div class="section-head"><h3>الأقسام الفرعية</h3></div>
-      ${subs.length === 0 ? `<div class="empty-state">ما فيه أقسام فرعية</div>` : `<div class="folder-grid">${subs.map((s, i) => `<div class="folder-card" style="--folder-color:${["#0F2542","#B8862E","#3C6E5A","#7A4B8A","#1F6F8B","#8A4B3C"][(s.color_index ?? i) % 6]}" onclick="viewNavStack.push({id:'${s.id}', title:'${escapeAttr(s.title)}'}); renderFolderLevel();"><div class="folder-title">${escapeHtml(s.title)}</div></div>`).join("")}</div>`}
+      ${subs.length === 0 ? `<div class="empty-state">ما فيه أقسام فرعية</div>` : `<div class="folder-grid">${subs.map((s, i) => `<div class="folder-card" style="--folder-color:${colorForView(s.color_index ?? i)}" onclick="viewNavStack.push({id:'${s.id}', title:'${escapeAttr(s.title)}'}); renderFolderLevel();"><div class="folder-icon-badge">${icon("folder", 22)}</div><div class="folder-title">${escapeHtml(s.title)}</div></div>`).join("")}</div>`}
     </div>
     ${parentId ? `<div class="section-card"><div class="section-head"><h3>المرفقات</h3></div>${items.length === 0 ? `<div class="empty-state">ما فيه مرفقات</div>` : items.map((item) => `<div class="item-row"><div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div></div><div class="actions">${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">${icon("eye", 15)}</a>` : ""}${item.external_url ? `<a class="icon-btn" href="${item.external_url}" target="_blank" title="فتح الرابط">${icon("link", 15)}</a>` : ""}</div></div>`).join("")}</div>` : ""}`;
 }

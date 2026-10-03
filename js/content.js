@@ -103,6 +103,7 @@ async function loadSubFolders(parentId) {
         <button class="folder-mini-btn" onclick="event.stopPropagation(); openEditSectionModal('${s.id}', '${escapeAttr(s.title)}', ${s.color_index ?? i})" title="تعديل">${icon("edit", 14)}</button>
         <button class="folder-mini-btn danger" onclick="event.stopPropagation(); deleteFolder('${s.id}')" title="حذف">${icon("trash", 14)}</button>
       </div>
+      <div class="folder-icon-badge">${icon("folder", 22)}</div>
       <div class="folder-title">${escapeHtml(s.title)}</div>
       <div class="folder-meta">${subCount.count ?? 0} قسم فرعي · ${itemCount.count ?? 0} مرفق</div>
     </div>`;
