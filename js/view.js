@@ -89,7 +89,7 @@ function renderExtLinksViewTab() {
   const links = SHARED.external_links || [];
   if (links.length === 0) { body.innerHTML = `<div class="section-card"><div class="empty-state">ما فيه روابط مضافة بعد</div></div>`; return; }
   body.innerHTML = `<div class="section-card"><div class="section-head"><h3>الصفوف الدراسية</h3></div><div class="folder-grid">
-    ${links.map((l, i) => `<div class="folder-card" style="--folder-color:${colorForView(l.color_index ?? i)}" onclick="window.open('${l.url}', '_blank')">${l.image_url ? `<img src="${l.image_url}" style="width:44px; height:44px; border-radius:12px; object-fit:cover; margin-bottom:14px;" />` : `<div class="folder-icon-badge">${icon("link", 22)}</div>`}<div class="folder-title">${escapeHtml(l.title)}</div><div class="folder-meta">${icon("link", 12)} فتح الرابط</div></div>`).join("")}
+    ${links.map((l, i) => `<div class="folder-card" style="--folder-color:${colorForView(i)}" onclick="window.open('${l.url}', '_blank')">${l.image_url ? `<img src="${l.image_url}" style="width:44px; height:44px; border-radius:12px; object-fit:cover; margin-bottom:14px;" />` : `<div class="folder-icon-badge">${icon("link", 22)}</div>`}<div class="folder-title">${escapeHtml(l.title)}</div><div class="folder-meta">${icon("link", 12)} فتح الرابط</div></div>`).join("")}
   </div></div>`;
 }
 
@@ -131,16 +131,27 @@ function calcResultsFor(studentId, period) {
   return { results, total, attendanceRate, presentCount, totalSessions: continuousScores.length };
 }
 
+let viewClassReportKind = "rasd";
+
 function renderClassStudentsView() {
   const body = document.getElementById("viewTabBody");
-  const students = (SHARED.students || []).filter((s) => s.class_id === viewCurrentClass.id);
+  const students = (SHARED.students || []).filter((s) => s.class_id === viewCurrentClass.id).sort((x, y) => (x.full_name || "").localeCompare(y.full_name || "", "ar"));
+  const isSpecial = viewClassReportKind === "special";
+  const head = isSpecial
+    ? `<tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>تحريري</th><th>عملي</th><th>الإجمالي</th><th>عدد الغياب</th><th>إيجابية</th><th>سلبية</th></tr>`
+    : `<tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>المجموع (40)</th><th>تحريري</th><th>عملي</th><th>المجموع (60)</th><th>الإجمالي</th><th>الحضور</th></tr>`;
   body.innerHTML = `
     <div class="breadcrumb-nav"><span class="crumb" onclick="viewCurrentClass=null; renderTrackingTab();">سجل المتابعة</span><span>/</span><span class="crumb current">${escapeHtml(viewCurrentClass.title)}</span></div>
-    <div class="period-toggle" id="viewPeriodToggle"><button data-p="p1" class="active">الفترة الأولى</button><button data-p="p2">الفترة الثانية</button></div>
+    <div class="period-toggle" id="viewKindToggle"><button data-k="rasd" class="${isSpecial ? "" : "active"}">تقرير الرصد</button><button data-k="special" class="${isSpecial ? "active" : ""}">تقرير خاص بالفصل</button></div>
+    <div class="period-toggle" id="viewPeriodToggle"><button data-p="p1" class="${viewReportPeriod === "p1" ? "active" : ""}">الفترة الأولى</button><button data-p="p2" class="${viewReportPeriod === "p2" ? "active" : ""}">الفترة الثانية</button></div>
+    ${isSpecial ? `<p style="color:var(--text-muted); font-size:12px; margin-bottom:14px;">مستوى جيد (80%+) · يحتاج تحسين (60-79%) · يحتاج متابعة عاجلة (أقل من 60%)</p>` : ""}
     <div class="section-card"><div class="grade-table-wrap"><table class="grade-table class-report-table">
-      <thead><tr><th>الطالب</th><th>مشاركة</th><th>واجبات</th><th>مهام أدائية</th><th>تطبيق عملي</th><th>المجموع (40)</th><th>تحريري</th><th>عملي</th><th>المجموع (60)</th><th>الإجمالي</th><th>الحضور</th></tr></thead>
+      <thead>${head}</thead>
       <tbody id="viewStudentsBody"></tbody>
     </table></div></div>`;
+  document.querySelectorAll("#viewKindToggle button").forEach((btn) => {
+    btn.addEventListener("click", () => { viewClassReportKind = btn.dataset.k; renderClassStudentsView(); });
+  });
   document.querySelectorAll("#viewPeriodToggle button").forEach((btn) => {
     btn.addEventListener("click", () => {
       viewReportPeriod = btn.dataset.p;
@@ -154,9 +165,23 @@ function renderClassStudentsView() {
 
 function fillStudentsTable(students) {
   const tbody = document.getElementById("viewStudentsBody");
+  const isSpecial = viewClassReportKind === "special";
   if (students.length === 0) { tbody.innerHTML = `<tr><td colspan="11" class="empty-state">ما فيه طلاب</td></tr>`; return; }
   tbody.innerHTML = students.map((st) => {
     const r = calcResultsFor(st.id, viewReportPeriod);
+    if (isSpecial) {
+      const notes = (SHARED.behavior_notes || []).filter((n) => n.student_id === st.id);
+      const pos = notes.filter((n) => n.note_type === "positive").length;
+      const neg = notes.filter((n) => n.note_type === "negative").length;
+      const absence = r.totalSessions - r.presentCount;
+      return `<tr style="cursor:pointer;" onclick="openViewStudentReport('${st.id}')">
+        <td class="student-name-cell">${escapeHtml(st.full_name)}</td>
+        ${r.results.map((c) => { const lvl = classifyLevelView(c.avg, c.target); return `<td>${c.avg}<br><span style="font-size:10px;" class="lvl-${lvl.cls || "mid"}">${lvl.label}</span></td>`; }).join("")}
+        <td style="font-weight:800; color:var(--navy);">${r.total}</td>
+        <td style="${absence > 0 ? "color:var(--danger); font-weight:700;" : ""}">${absence}</td>
+        <td>${pos}</td><td>${neg}</td>
+      </tr>`;
+    }
     const { continuousTotal, examsTotal } = calcSubtotalsView(r.results);
     const attStr = r.attendanceRate !== null ? r.attendanceRate + "%" : "—";
     return `<tr style="cursor:pointer;" onclick="openViewStudentReport('${st.id}')">
@@ -210,7 +235,7 @@ function renderFolderLevel() {
     ${breadcrumbHtml}
     ${statsHtml}
     <div class="section-card" style="margin-bottom:18px;"><div class="section-head"><h3>الأقسام الفرعية</h3></div>
-      ${subs.length === 0 ? `<div class="empty-state">ما فيه أقسام فرعية</div>` : `<div class="folder-grid">${subs.map((s, i) => `<div class="folder-card" style="--folder-color:${colorForView(s.color_index ?? i)}" onclick="viewNavStack.push({id:'${s.id}', title:'${escapeAttr(s.title)}'}); renderFolderLevel();"><div class="folder-icon-badge">${icon("folder", 22)}</div><div class="folder-title">${escapeHtml(s.title)}</div></div>`).join("")}</div>`}
+      ${subs.length === 0 ? `<div class="empty-state">ما فيه أقسام فرعية</div>` : `<div class="folder-grid">${subs.map((s, i) => `<div class="folder-card" style="--folder-color:${colorForView(i)}" onclick="viewNavStack.push({id:'${s.id}', title:'${escapeAttr(s.title)}'}); renderFolderLevel();"><div class="folder-icon-badge">${icon("folder", 22)}</div><div class="folder-title">${escapeHtml(s.title)}</div></div>`).join("")}</div>`}
     </div>
     ${parentId ? `<div class="section-card"><div class="section-head"><h3>المرفقات</h3></div>${items.length === 0 ? `<div class="empty-state">ما فيه مرفقات</div>` : items.map((item) => `<div class="item-row"><div class="info"><div class="t">${escapeHtml(item.title)}</div><div class="d">${item.item_date ? escapeHtml(item.item_date) + " · " : ""}${item.description ? escapeHtml(item.description) : ""}</div></div><div class="actions">${item.file_url ? `<a class="icon-btn" href="${item.file_url}" target="_blank" title="عرض الملف">${icon("eye", 15)}</a>` : ""}${item.external_url ? `<a class="icon-btn" href="${item.external_url}" target="_blank" title="فتح الرابط">${icon("link", 15)}</a>` : ""}</div></div>`).join("")}</div>` : ""}`;
 }

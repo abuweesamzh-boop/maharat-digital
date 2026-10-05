@@ -98,9 +98,9 @@ async function loadSubFolders(parentId) {
   holder.innerHTML = `<div class="folder-grid">` + sections.map((s, i) => {
     const [subCount, itemCount] = counts[i];
     return `
-    <div class="folder-card" style="--folder-color:${colorFor(s.color_index ?? i)}" onclick="enterFolder('${s.id}', '${escapeAttr(s.title)}')">
+    <div class="folder-card" style="--folder-color:${colorFor(i)}" onclick="enterFolder('${s.id}', '${escapeAttr(s.title)}')">
       <div class="folder-actions-row">
-        <button class="folder-mini-btn" onclick="event.stopPropagation(); openEditSectionModal('${s.id}', '${escapeAttr(s.title)}', ${s.color_index ?? i})" title="تعديل">${icon("edit", 14)}</button>
+        <button class="folder-mini-btn" onclick="event.stopPropagation(); openEditSectionModal('${s.id}', '${escapeAttr(s.title)}')" title="تعديل">${icon("edit", 14)}</button>
         <button class="folder-mini-btn danger" onclick="event.stopPropagation(); deleteFolder('${s.id}')" title="حذف">${icon("trash", 14)}</button>
       </div>
       <div class="folder-icon-badge">${icon("folder", 22)}</div>
@@ -132,21 +132,14 @@ async function loadItems(sectionId) {
 function openSectionModal(parentId) {
   document.getElementById("modalTitle").textContent = parentId ? "إضافة قسم فرعي" : "إضافة قسم جديد";
   document.getElementById("modalFields").innerHTML = `
-    <div class="field"><label>اسم القسم</label><input type="text" id="s_title" required /></div>
-    <div class="field"><label>اللون</label><div class="color-swatch-row">${FOLDER_COLORS.map((c, i) => `<div class="color-swatch ${i === 0 ? "selected" : ""}" data-index="${i}" style="background:${c}"></div>`).join("")}</div></div>`;
-  let selectedColor = 0;
-  setTimeout(() => {
-    document.querySelectorAll(".color-swatch").forEach((sw) => {
-      sw.addEventListener("click", () => { document.querySelectorAll(".color-swatch").forEach((x) => x.classList.remove("selected")); sw.classList.add("selected"); selectedColor = parseInt(sw.dataset.index, 10); });
-    });
-  }, 0);
+    <div class="field"><label>اسم القسم</label><input type="text" id="s_title" required /></div>`;
   document.getElementById("modalOverlay").classList.add("show");
   document.getElementById("modalForm").onsubmit = async (e) => {
     e.preventDefault();
     const submitBtn = document.getElementById("modalSubmit");
     submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
     const title = document.getElementById("s_title").value.trim();
-    const { error } = await supabaseClient.from("content_sections").insert({ title, module: currentModule, parent_id: parentId, color_index: selectedColor });
+    const { error } = await supabaseClient.from("content_sections").insert({ title, module: currentModule, parent_id: parentId });
     submitBtn.disabled = false; submitBtn.textContent = "حفظ";
     if (error) { alert("تعذر الإضافة: " + error.message); return; }
     document.getElementById("modalOverlay").classList.remove("show");
@@ -156,26 +149,19 @@ function openSectionModal(parentId) {
   document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
 }
 
-// ============ تعديل القسم (إعادة تسمية + تغيير لون) ============
+// ============ تعديل القسم (إعادة تسمية) ============
 
-function openEditSectionModal(sectionId, currentTitle, currentColorIndex) {
+function openEditSectionModal(sectionId, currentTitle) {
   document.getElementById("modalTitle").textContent = "تعديل القسم";
   document.getElementById("modalFields").innerHTML = `
-    <div class="field"><label>اسم القسم</label><input type="text" id="es_title" value="${escapeAttr(currentTitle)}" required /></div>
-    <div class="field"><label>اللون</label><div class="color-swatch-row">${FOLDER_COLORS.map((c, i) => `<div class="color-swatch ${i === (currentColorIndex ?? 0) ? "selected" : ""}" data-index="${i}" style="background:${c}"></div>`).join("")}</div></div>`;
-  let selectedColor = currentColorIndex ?? 0;
-  setTimeout(() => {
-    document.querySelectorAll(".color-swatch").forEach((sw) => {
-      sw.addEventListener("click", () => { document.querySelectorAll(".color-swatch").forEach((x) => x.classList.remove("selected")); sw.classList.add("selected"); selectedColor = parseInt(sw.dataset.index, 10); });
-    });
-  }, 0);
+    <div class="field"><label>اسم القسم</label><input type="text" id="es_title" value="${escapeAttr(currentTitle)}" required /></div>`;
   document.getElementById("modalOverlay").classList.add("show");
   document.getElementById("modalForm").onsubmit = async (e) => {
     e.preventDefault();
     const submitBtn = document.getElementById("modalSubmit");
     submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
     const title = document.getElementById("es_title").value.trim();
-    const { error } = await supabaseClient.from("content_sections").update({ title, color_index: selectedColor }).eq("id", sectionId);
+    const { error } = await supabaseClient.from("content_sections").update({ title }).eq("id", sectionId);
     submitBtn.disabled = false; submitBtn.textContent = "حفظ";
     if (error) { alert("تعذر التعديل: " + error.message); return; }
     document.getElementById("modalOverlay").classList.remove("show");
