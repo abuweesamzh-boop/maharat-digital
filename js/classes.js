@@ -1,4 +1,4 @@
-const CLASS_COLORS = ["#6D54E0", "#E0607A", "#1FA873", "#F2A33E", "#2E7CF2", "#8B5FE0"];
+const CLASS_COLORS = ["#4338CA", "#0F766E", "#BE185D", "#B45309", "#0369A1", "#047857", "#6D28D9", "#0E7490"];
 let currentClass = null;
 
 async function renderClassesSection() {
@@ -37,6 +37,7 @@ async function loadClasses() {
   if (error) { holder.innerHTML = `<div class="empty-state">حدث خطأ</div>`; return; }
   if (!classes || classes.length === 0) { holder.innerHTML = `<div class="empty-state">ما فيه فصول بعد — أضف فصل جديد للبدء</div>`; return; }
   const counts = await Promise.all(classes.map((c) => supabaseClient.from("students").select("id", { count: "exact", head: true }).eq("class_id", c.id)));
+  window.__classColorIndex = {}; classes.forEach((c, i) => { window.__classColorIndex[c.id] = i; });
   holder.innerHTML = classes.map((c, i) => `
     <div class="folder-card" style="--folder-color:${CLASS_COLORS[i % CLASS_COLORS.length]}" onclick="openClass('${c.id}', '${escapeAttr(c.title)}')">
       <div class="folder-actions-row">
@@ -95,18 +96,45 @@ async function deleteClass(id) {
   await loadClasses();
 }
 
+let classActiveTab = "sessions";
+const CLASS_TABS = [
+  { key: "sessions", label: "الحصص والاختبارات", ic: "list" },
+  { key: "students", label: "الطلاب", ic: "users" },
+  { key: "reports", label: "التقارير", ic: "chart" },
+  { key: "behavior", label: "الملاحظات السلوكية", ic: "note" },
+];
+function switchClassTab(key) {
+  classActiveTab = key;
+  document.querySelectorAll(".class-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === key));
+  document.querySelectorAll(".class-pane").forEach((p) => { p.style.display = p.dataset.pane === key ? "" : "none"; });
+}
+
 async function openClass(classId, title) {
   currentClass = { id: classId, title };
   document.getElementById("pageTitle").textContent = title;
   const contentArea = document.getElementById("contentArea");
+  const ci = Math.max(0, (window.__classColorIndex && window.__classColorIndex[classId]) || 0);
+  const headColor = CLASS_COLORS[ci % CLASS_COLORS.length];
   contentArea.innerHTML = `
-    <button class="btn-back no-print" onclick="renderClassesSection()">${icon("back", 15)} رجوع لسجل المتابعة</button>
     <div class="breadcrumb-nav"><span class="crumb" onclick="renderClassesSection()">سجل المتابعة</span><span>/</span><span class="crumb current">${escapeHtml(title)}</span></div>
 
-    <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
-      <button class="toolbar-icon-btn" id="toggleSearchBtn">${icon("search", 15)} بحث عن طالب</button>
-      <button class="toolbar-icon-btn" id="toggleImportBtn">${icon("upload", 15)} استيراد إكسل</button>
-      <button class="btn-add" id="addStudentBtn">${icon("plus", 14)} إضافة طالب</button>
+    <div class="class-head" style="--head-color:${headColor}">
+      <div class="class-head-main">
+        <div class="class-head-badge">${icon("users", 26)}</div>
+        <div>
+          <div class="class-head-title">${escapeHtml(title)}</div>
+          <div class="class-head-chips">
+            <span class="class-chip"><b id="chipStudents">–</b> طالب</span>
+            <span class="class-chip"><b id="chipSessions">–</b> حصة</span>
+            <span class="class-chip"><b id="chipExams">–</b> اختبار</span>
+          </div>
+        </div>
+      </div>
+      <div class="class-head-actions no-print">
+        <button class="class-head-btn" id="toggleSearchBtn">${icon("search", 15)} بحث</button>
+        <button class="class-head-btn" id="toggleImportBtn">${icon("upload", 15)} استيراد إكسل</button>
+        <button class="class-head-btn solid" id="addStudentBtn">${icon("plus", 14)} إضافة طالب</button>
+      </div>
     </div>
 
     <div class="section-card" id="searchPanel" style="margin-bottom:18px; display:none;">
@@ -123,32 +151,47 @@ async function openClass(classId, title) {
       <button class="btn-add" id="importBtn" style="margin-top:10px;">${icon("upload", 14)} استيراد الملف</button>
     </div>
 
-    <div class="section-card" style="margin-bottom:18px;">
-      <div class="section-head"><h3>${icon("chart")} الحصص والاختبارات</h3></div>
+    <div class="class-tabs no-print">
+      ${CLASS_TABS.map((t) => `<button class="class-tab ${t.key === classActiveTab ? "active" : ""}" data-tab="${t.key}" onclick="switchClassTab('${t.key}')">${icon(t.ic, 15)} ${t.label}</button>`).join("")}
+    </div>
+
+    <div class="class-pane" data-pane="sessions" style="${classActiveTab === "sessions" ? "" : "display:none;"}">
       <div id="gradingAreaHolder"></div>
     </div>
 
-    <div class="section-card" style="margin-bottom:18px;">
-      <div class="section-head"><h3>${icon("chart")} تقرير الرصد</h3></div>
-      <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">جدول كامل بدرجات كل طلاب الفصل، مع إمكانية الطباعة والتصدير.</p>
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn-add" onclick="renderClassReport('${classId}', '${escapeAttr(title)}')">فتح تقرير الرصد</button>
-        <button class="toolbar-icon-btn" onclick="renderTeacherSpecialReport('${classId}', '${escapeAttr(title)}')">${icon("note", 15)} تقرير خاص بالفصل</button>
+    <div class="class-pane" data-pane="students" style="${classActiveTab === "students" ? "" : "display:none;"}">
+      <div class="section-card">
+        <div class="section-head">
+          <h3>طلاب الفصل</h3>
+          <button class="toolbar-icon-btn" id="printQrBtn">${icon("qr", 15)} طباعة باركودات الطلاب</button>
+        </div>
+        <div id="studentsHolder"><div class="empty-state">جاري التحميل...</div></div>
       </div>
     </div>
 
-    <div class="section-card" style="margin-bottom:18px;">
-      <div class="section-head"><h3>${icon("note")} الملاحظات السلوكية</h3></div>
-      <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">تدوين الملاحظات الإيجابية والسلبية لكل طالب بشكل منفصل عن الحصص، مع عرض أنواعها وعدد تكرارها.</p>
-      <button class="btn-add" onclick="renderBehaviorPage('${classId}', '${escapeAttr(title)}')">فتح الملاحظات السلوكية</button>
+    <div class="class-pane" data-pane="reports" style="${classActiveTab === "reports" ? "" : "display:none;"}">
+      <div class="report-tiles">
+        <div class="report-tile" style="--tile-color:#4338CA" onclick="renderClassReport('${classId}', '${escapeAttr(title)}')">
+          <div class="report-tile-ic">${icon("chart", 24)}</div>
+          <div class="report-tile-t">تقرير الرصد</div>
+          <div class="report-tile-d">جدول كامل بدرجات كل طلاب الفصل مع الطباعة والتصدير.</div>
+        </div>
+        <div class="report-tile" style="--tile-color:#0F766E" onclick="renderTeacherSpecialReport('${classId}', '${escapeAttr(title)}')">
+          <div class="report-tile-ic">${icon("note", 24)}</div>
+          <div class="report-tile-t">تقرير خاص بالفصل</div>
+          <div class="report-tile-d">مستويات الطلاب والغياب والملاحظات في تقرير واحد.</div>
+        </div>
+      </div>
     </div>
 
-    <div class="section-card">
-      <div class="section-head">
-        <h3>طلاب الفصل</h3>
-        <button class="toolbar-icon-btn" id="printQrBtn">${icon("qr", 15)} طباعة باركودات الطلاب</button>
+    <div class="class-pane" data-pane="behavior" style="${classActiveTab === "behavior" ? "" : "display:none;"}">
+      <div class="report-tiles">
+        <div class="report-tile" style="--tile-color:#BE185D" onclick="renderBehaviorPage('${classId}', '${escapeAttr(title)}')">
+          <div class="report-tile-ic">${icon("note", 24)}</div>
+          <div class="report-tile-t">الملاحظات السلوكية</div>
+          <div class="report-tile-d">تدوين الملاحظات الإيجابية والسلبية لكل طالب بشكل منفصل عن الحصص، مع عرض أنواعها وتكرارها.</div>
+        </div>
       </div>
-      <div id="studentsHolder"><div class="empty-state">جاري التحميل...</div></div>
     </div>`;
 
   document.getElementById("toggleSearchBtn").addEventListener("click", () => {
@@ -170,8 +213,22 @@ async function openClass(classId, title) {
     searchTimeout = setTimeout(() => searchWithinClassInline(classId, e.target.value), 250);
   });
 
+  hydrateIcons(contentArea);
+  loadClassCounts(classId);
   await loadClassStudents(classId, "");
   renderGradingArea(classId, title);
+}
+
+async function loadClassCounts(classId) {
+  try {
+    const [st, se, ex] = await Promise.all([
+      supabaseClient.from("students").select("id", { count: "exact", head: true }).eq("class_id", classId),
+      supabaseClient.from("class_sessions").select("id", { count: "exact", head: true }).eq("class_id", classId).eq("session_kind", "continuous"),
+      supabaseClient.from("class_sessions").select("id", { count: "exact", head: true }).eq("class_id", classId).neq("session_kind", "continuous"),
+    ]);
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v ?? 0; };
+    set("chipStudents", st.count); set("chipSessions", se.count); set("chipExams", ex.count);
+  } catch (e) {}
 }
 
 async function searchWithinClassInline(classId, query) {

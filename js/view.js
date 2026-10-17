@@ -6,7 +6,7 @@ let viewCurrentClass = null;
 let viewReportPeriod = "p1";
 
 const MODULE_LABELS_VIEW = { portfolio: "ملف إنجاز المعلم", external: "مهارات رقمية - الصفوف" };
-const FOLDER_COLORS_VIEW = ["#6D54E0", "#E0607A", "#1FA873", "#F2A33E", "#2E7CF2", "#8B5FE0", "#C23A58", "#1FA8A8"];
+const FOLDER_COLORS_VIEW = ["#4338CA", "#0F766E", "#BE185D", "#B45309", "#0369A1", "#047857", "#6D28D9", "#0E7490"];
 function colorForView(i) { return FOLDER_COLORS_VIEW[i % FOLDER_COLORS_VIEW.length]; }
 function getDescendantSectionIdsView(rootId) {
   let ids = []; let frontier = [rootId];

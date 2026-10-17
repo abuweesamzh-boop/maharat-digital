@@ -40,9 +40,9 @@ function renderShareLinksStats(data) {
     else active++;
   });
   const segments = [
-    { value: active, color: "#1FA873", label: "نشطة" },
-    { value: expired, color: "#F2A33E", label: "منتهية الصلاحية" },
-    { value: revoked, color: "#C23A58", label: "أُلغيت يدوياً" },
+    { value: active, color: "#047857", label: "نشطة" },
+    { value: expired, color: "#B45309", label: "منتهية الصلاحية" },
+    { value: revoked, color: "#B91C1C", label: "أُلغيت يدوياً" },
   ];
   holder.innerHTML = buildDonutWidget(segments, { centerLabel: "كل الروابط" });
 }

@@ -1,5 +1,5 @@
 const BUCKET_NAME = "maharat-files";
-const FOLDER_COLORS = ["#6D54E0", "#E0607A", "#1FA873", "#F2A33E", "#2E7CF2", "#8B5FE0", "#C23A58", "#1FA8A8"];
+const FOLDER_COLORS = ["#4338CA", "#0F766E", "#BE185D", "#B45309", "#0369A1", "#047857", "#6D28D9", "#0E7490"];
 let currentModule = null;
 let navStack = [];
 const MODULE_LABELS = { portfolio: { page: "ملف إنجاز المعلم", icon: "folder" }, external: { page: "مهارات رقمية - الصفوف", icon: "rocket" } };

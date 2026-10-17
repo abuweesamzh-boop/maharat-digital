@@ -82,32 +82,74 @@ async function loadGradingKinds() {
   const holder = document.getElementById("gradingKindsHolder");
   holder.innerHTML = `<div class="empty-state">جاري التحميل...</div>`;
   const kinds = ["continuous", "written_exam", "practical_exam"];
-  let html = "";
+  const kindIcons = { continuous: "list", written_exam: "edit", practical_exam: "check" };
+  let html = `<div class="kind-columns">`;
   for (const kind of kinds) {
     const { data: sessions } = await supabaseClient.from("class_sessions").select("*").eq("class_id", gradingClassId).eq("period", gradingPeriod).eq("session_kind", kind).order("session_number", { ascending: true });
+    const list = sessions || [];
     html += `
-      <div class="section-card" style="margin-bottom:16px;">
-        <div class="section-head"><h3>${SESSION_KIND_LABELS[kind]}</h3><button class="btn-add" onclick="createSession('${kind}')">${icon("plus", 14)} ${kind === "continuous" ? "حصة جديدة" : "اختبار جديد"}</button></div>
-        ${!sessions || sessions.length === 0 ? `<div class="empty-state" style="padding:20px;">ما فيه ${kind === "continuous" ? "حصص" : "اختبارات"} مسجلة بعد</div>` : `<div class="session-pill-row">` + sessions.map((s) => `
-          <div class="session-pill" onclick="openSessionGrid('${s.id}', '${kind}', ${s.session_number})">
-            <div class="del" onclick="event.stopPropagation(); deleteSession('${s.id}')">${icon("close", 11)}</div>
-            <div class="edit-sess" onclick="event.stopPropagation(); openEditSessionModal('${s.id}', '${kind}')">${icon("edit", 11)}</div>
-            <div class="num">${kind === "continuous" ? "حصة " + s.session_number : "اختبار " + s.session_number}</div>
-            <div class="lbl">${s.session_date ? new Date(s.session_date).toLocaleDateString("ar-SA") : "اضغط للتعديل"}</div>
-            <div class="day">${weekdayNameFromDate(s.session_date)}</div>
-          </div>`).join("") + `</div>`}
+      <div class="kind-col kind-${kind}">
+        <div class="kind-col-head">
+          <div class="kind-col-title"><span class="kind-col-ic">${icon(kindIcons[kind], 16)}</span><span>${SESSION_KIND_LABELS[kind]}</span><span class="kind-col-count">${list.length}</span></div>
+          <button class="kind-col-add" onclick="createSession('${kind}')">${icon("plus", 13)} ${kind === "continuous" ? "حصة" : "اختبار"}</button>
+        </div>
+        <div class="kind-col-body">
+        ${list.length === 0 ? `<div class="kind-empty">ما فيه ${kind === "continuous" ? "حصص" : "اختبارات"} مسجلة بعد</div>` : list.map((s) => `
+          <div class="sess-row" onclick="openSessionGrid('${s.id}', '${kind}', ${s.session_number})">
+            <div class="sess-num">${s.session_number}</div>
+            <div class="sess-info">
+              <div class="sess-title">${s.lesson_title ? escapeHtml(s.lesson_title) : `<span class="sess-notitle">${kind === "continuous" ? "حصة " : "اختبار "}${s.session_number} — بدون عنوان</span>`}</div>
+              <div class="sess-date">${s.session_date ? new Date(String(s.session_date).slice(0, 10) + "T00:00:00").toLocaleDateString("ar-SA") : "بدون تاريخ"}${s.session_date ? " · " + weekdayNameFromDate(String(s.session_date).slice(0, 10)) : ""}</div>
+            </div>
+            <div class="sess-actions">
+              <span class="sess-act" title="تعديل" onclick="event.stopPropagation(); openEditSessionModal('${s.id}', '${kind}')">${icon("edit", 13)}</span>
+              <span class="sess-act danger" title="حذف" onclick="event.stopPropagation(); deleteSession('${s.id}')">${icon("close", 13)}</span>
+            </div>
+          </div>`).join("")}
+        </div>
       </div>`;
   }
+  html += `</div>`;
   holder.innerHTML = html;
   hydrateIcons(holder);
 }
 
+async function insertSessionRow(row) {
+  let res = await supabaseClient.from("class_sessions").insert(row).select().single();
+  if (res.error && row.lesson_title !== undefined && /lesson_title/i.test(res.error.message || "")) {
+    const { lesson_title, ...rest } = row;
+    res = await supabaseClient.from("class_sessions").insert(rest).select().single();
+    if (!res.error) alert("تم إنشاء السجل لكن عنوان الدرس لم يُحفظ: عمود lesson_title غير موجود في قاعدة البيانات. شغّل أمر SQL الخاص به في Supabase.");
+  }
+  return res;
+}
+
 async function createSession(kind) {
-  const { data: existing } = await supabaseClient.from("class_sessions").select("session_number").eq("class_id", gradingClassId).eq("period", gradingPeriod).eq("session_kind", kind).order("session_number", { ascending: false }).limit(1);
-  const nextNumber = existing && existing.length > 0 ? existing[0].session_number + 1 : 1;
-  const { data: newSession, error } = await supabaseClient.from("class_sessions").insert({ class_id: gradingClassId, period: gradingPeriod, session_kind: kind, session_number: nextNumber, session_date: new Date().toISOString().slice(0, 10) }).select().single();
-  if (error) { alert("تعذر إنشاء السجل: " + error.message); return; }
-  openSessionGrid(newSession.id, kind, nextNumber);
+  const isContinuous = kind === "continuous";
+  document.getElementById("modalTitle").textContent = isContinuous ? "حصة جديدة" : "اختبار جديد";
+  document.getElementById("modalFields").innerHTML = `
+    <div class="field"><label>${isContinuous ? "عنوان الدرس" : "عنوان الاختبار"}</label><input type="text" id="ns_title" placeholder="${isContinuous ? "مثال: مقدمة في الخوارزميات" : "مثال: اختبار الفترة الأولى"}" autocomplete="off" /></div>
+    <div class="field"><label>التاريخ</label><input type="date" id="ns_date" value="${new Date().toISOString().slice(0, 10)}" /></div>
+    <p style="color:var(--text-muted); font-size:11.5px; line-height:1.8;">يمكنك ترك العنوان فارغاً وتعديله لاحقاً.</p>`;
+  document.getElementById("modalOverlay").classList.add("show");
+  setTimeout(() => { const t = document.getElementById("ns_title"); if (t) t.focus(); }, 50);
+  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
+  document.getElementById("modalForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const submitBtn = document.getElementById("modalSubmit");
+    submitBtn.disabled = true; submitBtn.innerHTML = '<span class="loading-spin"></span>';
+    const title = document.getElementById("ns_title").value.trim();
+    const date = document.getElementById("ns_date").value || new Date().toISOString().slice(0, 10);
+    const { data: existing } = await supabaseClient.from("class_sessions").select("session_number").eq("class_id", gradingClassId).eq("period", gradingPeriod).eq("session_kind", kind).order("session_number", { ascending: false }).limit(1);
+    const nextNumber = existing && existing.length > 0 ? existing[0].session_number + 1 : 1;
+    const row = { class_id: gradingClassId, period: gradingPeriod, session_kind: kind, session_number: nextNumber, session_date: date };
+    if (title) row.lesson_title = title;
+    const { data: newSession, error } = await insertSessionRow(row);
+    submitBtn.disabled = false; submitBtn.textContent = "حفظ";
+    if (error) { alert("تعذر إنشاء السجل: " + error.message); return; }
+    document.getElementById("modalOverlay").classList.remove("show");
+    openSessionGrid(newSession.id, kind, nextNumber);
+  };
 }
 
 async function deleteSession(sessionId) {
@@ -123,6 +165,7 @@ async function openEditSessionModal(sessionId, kind) {
   const isContinuous = kind === "continuous";
   document.getElementById("modalTitle").textContent = `تعديل ${isContinuous ? "الحصة" : "الاختبار"}`;
   document.getElementById("modalFields").innerHTML = `
+    <div class="field"><label>${isContinuous ? "عنوان الدرس" : "عنوان الاختبار"}</label><input type="text" id="es_title" value="${escapeHtml(s.lesson_title || "").replace(/"/g, "&quot;")}" placeholder="اكتب عنوان الدرس" autocomplete="off" /></div>
     <div class="field"><label>رقم ${isContinuous ? "الحصة" : "الاختبار"}</label><input type="number" id="es_number" min="1" value="${s.session_number}" required /></div>
     <div class="field"><label>الفترة</label>
       <select id="es_period" style="width:100%; background:var(--bg-surface); border:1px solid var(--border-soft); border-radius:10px; padding:11px 12px; color:var(--text-primary); font-family:var(--font-body);">
@@ -144,7 +187,13 @@ async function openEditSessionModal(sessionId, kind) {
     const session_number = parseInt(document.getElementById("es_number").value, 10);
     const period = document.getElementById("es_period").value;
     const session_date = document.getElementById("es_date").value || null;
-    const { error } = await supabaseClient.from("class_sessions").update({ session_number, period, session_date }).eq("id", sessionId);
+    const lesson_title = document.getElementById("es_title").value.trim() || null;
+    let { error } = await supabaseClient.from("class_sessions").update({ session_number, period, session_date, lesson_title }).eq("id", sessionId);
+    if (error && /lesson_title/i.test(error.message || "")) {
+      const r2 = await supabaseClient.from("class_sessions").update({ session_number, period, session_date }).eq("id", sessionId);
+      error = r2.error;
+      if (!error) alert("تم الحفظ لكن عنوان الدرس لم يُحفظ: عمود lesson_title غير موجود في قاعدة البيانات. شغّل أمر SQL الخاص به في Supabase.");
+    }
     submitBtn.disabled = false; submitBtn.textContent = "حفظ";
     if (error) { alert("تعذر الحفظ: " + error.message); return; }
     document.getElementById("modalOverlay").classList.remove("show");
@@ -160,6 +209,58 @@ const CONTINUOUS_COLS = [
 ];
 let activeCols = ["participation", "homework", "tasks", "practical"];
 
+function circClass(v) {
+  if (v === "" || v === null || v === undefined) return "";
+  const n = Number(v);
+  if (n === 10) return "ok";
+  if (n === 0) return "bad";
+  return "part";
+}
+function circText(v) {
+  if (v === "" || v === null || v === undefined) return "";
+  const n = Number(v);
+  if (n === 10) return "✓";
+  if (n === 0) return "✕";
+  return String(n);
+}
+function updateRowTotal(tr) {
+  const out = tr.querySelector(".row-total");
+  if (!out) return;
+  const groups = Array.from(tr.querySelectorAll(".score-chips"));
+  const vals = groups.map((g) => g.dataset.value).filter((v) => v !== "");
+  const sum = vals.reduce((a, b) => a + Number(b), 0);
+  if (vals.length === groups.length) { out.textContent = sum + "/40"; out.className = "row-total full"; }
+  else if (vals.length > 0) { out.textContent = sum + "…"; out.className = "row-total partial"; }
+  else { out.textContent = "—"; out.className = "row-total partial"; }
+}
+function setCircValue(group, v) {
+  group.dataset.value = v;
+  const btn = group.querySelector(".circ");
+  btn.className = "circ " + circClass(v);
+  btn.textContent = circText(v);
+  const tr = group.closest("tr");
+  if (tr) updateRowTotal(tr);
+}
+function openCircPicker(btn, group) {
+  document.querySelectorAll(".circ-picker").forEach((p) => p.remove());
+  const pick = document.createElement("div");
+  pick.className = "circ-picker";
+  const opts = ["10", "8", "6", "5", "4", "2", "0", ""];
+  pick.innerHTML = opts.map((o) => `<button type="button" class="circ ${circClass(o)} ${o === "" ? "clear" : ""}" data-v="${o}">${o === "" ? "فارغ" : (o === "10" ? "✓" : (o === "0" ? "✕" : o))}</button>`).join("");
+  document.body.appendChild(pick);
+  const r = btn.getBoundingClientRect();
+  const w = 8 * 38 + 16;
+  let left = r.left + r.width / 2 - w / 2 + window.scrollX;
+  left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+  pick.style.left = left + "px";
+  pick.style.top = (r.bottom + window.scrollY + 6) + "px";
+  pick.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { setCircValue(group, b.dataset.v); pick.remove(); }));
+  setTimeout(() => {
+    const off = (e) => { if (!pick.contains(e.target)) { pick.remove(); document.removeEventListener("pointerdown", off, true); } };
+    document.addEventListener("pointerdown", off, true);
+  }, 0);
+}
+
 async function openSessionGrid(sessionId, kind, sessionNumber) {
   const contentArea = document.getElementById("contentArea");
   const isContinuous = kind === "continuous";
@@ -172,16 +273,17 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
   const { data: scores } = await supabaseClient.from("session_scores").select("*").eq("session_id", sessionId);
   const scoreMap = {};
   (scores || []).forEach((s) => (scoreMap[s.student_id] = s));
-  const { data: sessionRow } = await supabaseClient.from("class_sessions").select("session_date").eq("id", sessionId).single();
+  const { data: sessionRow } = await supabaseClient.from("class_sessions").select("*").eq("id", sessionId).single();
+  const lessonTitle = sessionRow && sessionRow.lesson_title ? sessionRow.lesson_title : "";
   const currentDate = sessionRow && sessionRow.session_date ? sessionRow.session_date : new Date().toISOString().slice(0, 10);
-  document.getElementById("pageTitle").textContent = `${SESSION_KIND_LABELS[kind]} — ${isContinuous ? "حصة" : "اختبار"} ${sessionNumber}`;
+  document.getElementById("pageTitle").textContent = `${SESSION_KIND_LABELS[kind]} — ${isContinuous ? "حصة" : "اختبار"} ${sessionNumber}${lessonTitle ? " · " + lessonTitle : ""}`;
   contentArea.innerHTML = `
     <button class="btn-back no-print" onclick="openClass('${gradingClassId}', '${escapeAttr(gradingClassTitle)}')">${icon("back", 15)} رجوع للفصل</button>
     <div class="field" style="max-width:220px;"><label>تاريخ ${isContinuous ? "الحصة" : "الاختبار"}</label><input type="date" id="sessionDateInput" value="${currentDate}" /><div style="font-size:11px; color:var(--gold); font-weight:700; margin-top:4px;">اليوم: <span id="sessionDayLabel">${weekdayNameFromDate(currentDate)}</span></div></div>
     ${isContinuous ? `<div class="column-picker" id="columnPicker">${CONTINUOUS_COLS.map((c) => `<label><input type="checkbox" class="col-check" value="${c.field}" checked /> ${c.label}</label>`).join("")}</div>` : ""}
     <div class="section-card">
       <div class="section-head"><h3>إدخال الدرجات — ${students.length} طالب</h3><button class="btn-add" id="saveGridBtn">${icon("check", 14)} حفظ الكل</button></div>
-      <p style="color:var(--text-muted); font-size:12px; margin-bottom:14px;">القيمة الافتراضية 10 لكل خانة — بس اضغط على الرقم المناسب للطالب لو يستحق أقل.</p>
+      ${isContinuous ? `<div class="circ-legend"><span><i class="circ ok sm">✓</i> ضغطة = ممتاز (10)</span><span><i class="circ bad sm">✕</i> ضغطتان = لم ينفذ (0)</span><span><i class="circ part sm">6</i> ضغطة مطوّلة = درجة أخرى</span><span><i class="circ sm"></i> فارغ = لا يُحتسب</span></div>` : ""}
       <div class="grade-table-wrap"><table class="grade-table" id="gradeTable"><thead><tr id="gradeTableHead"></tr></thead><tbody id="gradeTableBody"></tbody></table></div>
     </div>`;
   document.getElementById("sessionDateInput").addEventListener("change", async (e) => {
@@ -193,18 +295,21 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
   function renderTableRows() {
     const head = document.getElementById("gradeTableHead");
     const body = document.getElementById("gradeTableBody");
-    if (isContinuous) head.innerHTML = `<th>الطالب</th>${CONTINUOUS_COLS.map((c) => `<th class="col-${c.field}">${c.label}</th>`).join("")}<th>الحضور</th>`;
+    if (isContinuous) head.innerHTML = `<th>الطالب</th>${CONTINUOUS_COLS.map((c) => `<th class="col-${c.field}">${c.label}<button type="button" class="all-ok-btn" data-field="${c.field}" title="تعيين ✓ للجميع">الكل ✓</button></th>`).join("")}<th>المجموع /40</th><th>الحضور</th>`;
     else head.innerHTML = `<th>الطالب</th><th>الدرجة (30)</th>`;
 
     body.innerHTML = students.map((st) => {
       const sc = scoreMap[st.id] || {};
       if (isContinuous) {
         const cols = CONTINUOUS_COLS.map(({ field }) => {
-          const current = sc[field] !== undefined && sc[field] !== null ? sc[field] : 10;
-          return `<td class="col-${field}"><div class="score-chips" data-field="${field}" data-student="${st.id}" data-value="${current}">${CHIP_VALUES.map((v) => `<button type="button" class="chip ${v === current ? "active" : ""}" data-val="${v}">${v}</button>`).join("")}</div></td>`;
+          const isNew = !scoreMap[st.id];
+          const dflt = (field === "tasks" || field === "practical") ? 10 : null;
+          const current = isNew ? dflt : (sc[field] !== undefined ? sc[field] : null);
+          const val = current === null ? "" : String(current);
+          return `<td class="col-${field}"><div class="score-chips" data-field="${field}" data-student="${st.id}" data-value="${val}"><button type="button" class="circ ${circClass(val)}">${circText(val)}</button></div></td>`;
         }).join("");
         const isPresent = sc.attendance !== false;
-        return `<tr data-student="${st.id}"><td class="student-name-cell">${escapeHtml(st.full_name)}</td>${cols}<td><button type="button" class="attendance-toggle ${isPresent ? "" : "absent"}" data-present="${isPresent}">${isPresent ? "حاضر" : "غائب"}</button></td></tr>`;
+        return `<tr data-student="${st.id}"><td class="student-name-cell">${escapeHtml(st.full_name)}</td>${cols}<td class="row-total-cell"><span class="row-total"></span></td><td><button type="button" class="attendance-toggle ${isPresent ? "" : "absent"}" data-present="${isPresent}">${isPresent ? "حاضر" : "غائب"}</button></td></tr>`;
       }
       const current = sc.exam_score !== undefined && sc.exam_score !== null ? sc.exam_score : 30;
       return `<tr data-student="${st.id}"><td class="student-name-cell">${escapeHtml(st.full_name)}</td><td><input type="number" class="grid-input" data-field="exam_score" min="0" max="30" step="0.5" value="${current}" /></td></tr>`;
@@ -212,14 +317,22 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
     hydrateIcons(body);
 
     body.querySelectorAll(".score-chips").forEach((group) => {
-      group.querySelectorAll(".chip").forEach((chip) => {
-        chip.addEventListener("click", () => {
-          group.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
-          chip.classList.add("active");
-          group.dataset.value = chip.dataset.val;
-        });
+      const btn = group.querySelector(".circ");
+      let pressTimer = null, longFired = false;
+      btn.addEventListener("pointerdown", () => {
+        longFired = false;
+        pressTimer = setTimeout(() => { longFired = true; openCircPicker(btn, group); }, 480);
+      });
+      ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, () => clearTimeout(pressTimer)));
+      btn.addEventListener("contextmenu", (e) => { e.preventDefault(); clearTimeout(pressTimer); longFired = true; openCircPicker(btn, group); });
+      btn.addEventListener("click", () => {
+        if (longFired) { longFired = false; return; }
+        const v = group.dataset.value;
+        setCircValue(group, v === "" ? "10" : (v === "0" ? "" : (v === "10" ? "0" : "10")));
       });
     });
+    wireAllOkButtons();
+    body.querySelectorAll("tr").forEach(updateRowTotal);
     body.querySelectorAll(".attendance-toggle").forEach((btn) => {
       btn.addEventListener("click", () => {
         const present = btn.dataset.present === "true";
@@ -232,6 +345,14 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
       btn.addEventListener("click", (e) => openQuickNotePopover(e, btn.dataset.student, btn.dataset.name, sessionId));
     });
     applyColumnVisibility();
+  }
+
+  function wireAllOkButtons() {
+    document.querySelectorAll(".all-ok-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        document.querySelectorAll(`#gradeTableBody .score-chips[data-field="${b.dataset.field}"]`).forEach((g) => setCircValue(g, "10"));
+      });
+    });
   }
 
   function applyColumnVisibility() {
@@ -386,7 +507,7 @@ async function saveSessionGrid(sessionId, isContinuous) {
     const studentId = tr.dataset.student;
     const row = { session_id: sessionId, student_id: studentId };
     if (isContinuous) {
-      tr.querySelectorAll(".score-chips").forEach((group) => { row[group.dataset.field] = parseFloat(group.dataset.value); });
+      tr.querySelectorAll(".score-chips").forEach((group) => { row[group.dataset.field] = group.dataset.value === "" ? null : parseFloat(group.dataset.value); });
       const attBtn = tr.querySelector(".attendance-toggle");
       row.attendance = attBtn.dataset.present === "true";
     } else {
