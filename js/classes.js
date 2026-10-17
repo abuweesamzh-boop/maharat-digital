@@ -137,6 +137,12 @@ async function openClass(classId, title) {
       </div>
     </div>
 
+    <div class="section-card" style="margin-bottom:18px;">
+      <div class="section-head"><h3>${icon("note")} الملاحظات السلوكية</h3></div>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">تدوين الملاحظات الإيجابية والسلبية لكل طالب بشكل منفصل عن الحصص، مع عرض أنواعها وعدد تكرارها.</p>
+      <button class="btn-add" onclick="renderBehaviorPage('${classId}', '${escapeAttr(title)}')">فتح الملاحظات السلوكية</button>
+    </div>
+
     <div class="section-card">
       <div class="section-head">
         <h3>طلاب الفصل</h3>

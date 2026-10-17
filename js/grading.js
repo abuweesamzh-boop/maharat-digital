@@ -193,7 +193,7 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
   function renderTableRows() {
     const head = document.getElementById("gradeTableHead");
     const body = document.getElementById("gradeTableBody");
-    if (isContinuous) head.innerHTML = `<th>الطالب</th>${CONTINUOUS_COLS.map((c) => `<th class="col-${c.field}">${c.label}</th>`).join("")}<th>ملاحظة</th><th>الحضور</th>`;
+    if (isContinuous) head.innerHTML = `<th>الطالب</th>${CONTINUOUS_COLS.map((c) => `<th class="col-${c.field}">${c.label}</th>`).join("")}<th>الحضور</th>`;
     else head.innerHTML = `<th>الطالب</th><th>الدرجة (30)</th>`;
 
     body.innerHTML = students.map((st) => {
@@ -204,7 +204,7 @@ async function openSessionGrid(sessionId, kind, sessionNumber) {
           return `<td class="col-${field}"><div class="score-chips" data-field="${field}" data-student="${st.id}" data-value="${current}">${CHIP_VALUES.map((v) => `<button type="button" class="chip ${v === current ? "active" : ""}" data-val="${v}">${v}</button>`).join("")}</div></td>`;
         }).join("");
         const isPresent = sc.attendance !== false;
-        return `<tr data-student="${st.id}"><td class="student-name-cell">${escapeHtml(st.full_name)}</td>${cols}<td><button type="button" class="quick-note-btn" data-student="${st.id}" data-name="${escapeAttr(st.full_name)}" title="ملاحظة سريعة">${icon("note", 13)}</button></td><td><button type="button" class="attendance-toggle ${isPresent ? "" : "absent"}" data-present="${isPresent}">${isPresent ? "حاضر" : "غائب"}</button></td></tr>`;
+        return `<tr data-student="${st.id}"><td class="student-name-cell">${escapeHtml(st.full_name)}</td>${cols}<td><button type="button" class="attendance-toggle ${isPresent ? "" : "absent"}" data-present="${isPresent}">${isPresent ? "حاضر" : "غائب"}</button></td></tr>`;
       }
       const current = sc.exam_score !== undefined && sc.exam_score !== null ? sc.exam_score : 30;
       return `<tr data-student="${st.id}"><td class="student-name-cell">${escapeHtml(st.full_name)}</td><td><input type="number" class="grid-input" data-field="exam_score" min="0" max="30" step="0.5" value="${current}" /></td></tr>`;
@@ -816,4 +816,208 @@ async function trackSearch(query) {
   if (error || !data || data.length === 0) { resultsEl.innerHTML = `<div class="empty-state" style="padding:16px;">ما فيه نتائج</div>`; return; }
   resultsEl.innerHTML = data.map((s) => `<div class="item-row" style="cursor:pointer;" onclick="openStudentReport('${s.id}', '${escapeAttr(s.full_name)}')"><div class="info"><div class="t">${escapeHtml(s.full_name)}</div><div class="d">${s.classes ? escapeHtml(s.classes.title) : "بدون فصل"} · الصف ${escapeHtml(s.grade)}</div></div><div class="actions"><span class="icon-btn">${icon("back", 14)}</span></div></div>`).join("");
   hydrateIcons(resultsEl);
+}
+
+
+// ============================================
+// صفحة الملاحظات السلوكية (منفصلة عن الحصص)
+// ============================================
+let behState = null;
+
+async function renderBehaviorPage(classId, classTitle) {
+  document.getElementById("pageTitle").textContent = `الملاحظات السلوكية: ${classTitle}`;
+  const contentArea = document.getElementById("contentArea");
+  contentArea.innerHTML = `<div class="empty-state">جاري التحميل...</div>`;
+  const { data: students } = await supabaseClient.from("students").select("*").eq("class_id", classId).order("full_name", { ascending: true });
+  const list = students || [];
+  let notes = [];
+  if (list.length) {
+    const { data } = await supabaseClient.from("behavior_notes").select("*").in("student_id", list.map((x) => x.id)).order("created_at", { ascending: false });
+    notes = data || [];
+  }
+  behState = {
+    classId, classTitle, students: list, notes, mode: "student",
+    selStudent: list[0] ? list[0].id : null, type: "positive",
+    batchType: "negative", batchNote: null, batchCustom: "", batchStudents: new Set(),
+    logFilter: "all", flash: "",
+  };
+  drawBehaviorPage();
+}
+
+async function behReloadNotes() {
+  const ids = behState.students.map((x) => x.id);
+  if (!ids.length) { behState.notes = []; return; }
+  const { data } = await supabaseClient.from("behavior_notes").select("*").in("student_id", ids).order("created_at", { ascending: false });
+  behState.notes = data || [];
+}
+
+async function behAddNotes(rows, flashText, beforeDraw) {
+  const { error } = await supabaseClient.from("behavior_notes").insert(rows);
+  if (error) { alert("تعذر الحفظ"); return false; }
+  await behReloadNotes();
+  behState.flash = flashText;
+  if (beforeDraw) beforeDraw();
+  drawBehaviorPage();
+  return true;
+}
+
+function behCounts(studentId) {
+  const mine = behState.notes.filter((n) => n.student_id === studentId);
+  return { pos: mine.filter((n) => n.note_type === "positive").length, neg: mine.filter((n) => n.note_type === "negative").length };
+}
+function behStudentName(id) { const x = behState.students.find((y) => y.id === id); return x ? x.full_name : ""; }
+function behBatchText() {
+  const st = behState;
+  const custom = (st.batchCustom || "").trim();
+  if (custom) return custom;
+  const presets = st.batchType === "positive" ? POSITIVE_NOTES : NEGATIVE_NOTES;
+  return st.batchNote !== null ? presets[st.batchNote] : "";
+}
+function behUpdateBatchBtn() {
+  const st = behState;
+  const btn = document.getElementById("behBatchSave");
+  if (!btn) return;
+  const text = behBatchText();
+  const n = st.batchStudents.size;
+  btn.disabled = !text || n === 0;
+  btn.textContent = !text ? "اختر ملاحظة أولاً" : (n === 0 ? "اختر الطلاب" : `تسجيل «${text}» على ${n} ${n === 1 ? "طالب" : "طلاب"}`);
+}
+
+function behStudentPanelHtml() {
+  const st = behState;
+  const stu = st.students.find((x) => x.id === st.selStudent);
+  if (!stu) return `<div class="empty-state">اختر طالباً من القائمة</div>`;
+  const mine = st.notes.filter((n) => n.student_id === stu.id);
+  const presets = st.type === "positive" ? POSITIVE_NOTES : NEGATIVE_NOTES;
+  const groups = {};
+  mine.forEach((n) => {
+    const k = n.note_type + "|" + n.note;
+    if (!groups[k]) groups[k] = { type: n.note_type, note: n.note, count: 0 };
+    groups[k].count++;
+  });
+  const summary = Object.values(groups).sort((a, b) => b.count - a.count).map((g) => `<span class="beh-sum ${g.type}">${escapeHtml(g.note)} <b>×${g.count}</b></span>`).join("") || `<span class="note-selected-empty">ما فيه ملاحظات مسجلة على هذا الطالب</span>`;
+  const indiv = mine.map((n) => `<div class="beh-log-row"><span class="dot-badge ${n.note_type}"></span><span style="flex:1;">${escapeHtml(n.note)}</span><span class="beh-date">${new Date(n.created_at).toLocaleDateString("ar-SA")}</span><button type="button" class="icon-btn danger" data-beh-del="${n.id}" title="حذف">${icon("trash", 14)}</button></div>`).join("");
+  return `
+    <div class="section-head"><h3>${escapeHtml(stu.full_name)} — ماذا تسجّل؟</h3></div>
+    <div class="beh-big-btns">
+      <button type="button" class="beh-big-btn positive ${st.type === "positive" ? "active" : ""}" data-beh-type="positive">+ إيجابية</button>
+      <button type="button" class="beh-big-btn negative ${st.type === "negative" ? "active" : ""}" data-beh-type="negative">− سلبية</button>
+    </div>
+    <p class="beh-hint">اضغط على الملاحظة لتُسجَّل فوراً على الطالب.</p>
+    <div class="beh-pills">${presets.map((n, i) => `<button type="button" class="note-pill ${st.type}" data-beh-add="${i}">${escapeHtml(n)}</button>`).join("")}</div>
+    <div class="note-custom-row"><input type="text" class="note-custom-input" id="behCustomInput" placeholder="ملاحظة مخصصة (اكتبها واضغط +)"><button type="button" class="note-custom-add" id="behCustomAdd" title="إضافة">${icon("plus", 14)}</button></div>
+    <div class="beh-subtitle">المسجّل على الطالب (النوع وعدد التكرار)</div>
+    <div class="beh-sums">${summary}</div>
+    ${indiv ? `<div class="beh-subtitle">التفاصيل</div>${indiv}` : ""}`;
+}
+
+function behBatchPanelHtml() {
+  const st = behState;
+  const presets = st.batchType === "positive" ? POSITIVE_NOTES : NEGATIVE_NOTES;
+  return `
+    <div class="section-head"><h3>سجّل ملاحظة على عدة طلاب دفعة واحدة</h3></div>
+    <p class="beh-hint">١) اختر نوع الملاحظة ثم الملاحظة  ٢) اضغط أسماء الطلاب  ٣) اضغط تسجيل</p>
+    <div class="beh-big-btns">
+      <button type="button" class="beh-big-btn positive ${st.batchType === "positive" ? "active" : ""}" data-beh-btype="positive">+ إيجابية</button>
+      <button type="button" class="beh-big-btn negative ${st.batchType === "negative" ? "active" : ""}" data-beh-btype="negative">− سلبية</button>
+    </div>
+    <div class="beh-pills">${presets.map((n, i) => `<button type="button" class="note-pill ${st.batchType} ${st.batchNote === i ? "selected" : ""}" data-beh-bnote="${i}">${escapeHtml(n)}</button>`).join("")}</div>
+    <div class="note-custom-row"><input type="text" class="note-custom-input" id="behBatchCustom" placeholder="أو اكتب ملاحظة مخصصة"></div>
+    <div class="beh-subtitle" style="display:flex; justify-content:space-between; align-items:center;"><span>الطلاب</span><button type="button" class="toolbar-icon-btn" id="behBatchAll" style="padding:5px 12px;">تحديد الكل / إلغاء</button></div>
+    <div class="beh-chips">${st.students.map((x) => `<button type="button" class="beh-stu-chip ${st.batchStudents.has(x.id) ? "on" : ""}" data-beh-bstu="${x.id}">${escapeHtml(x.full_name)}</button>`).join("")}</div>
+    <button type="button" class="btn-add" id="behBatchSave" style="width:100%; justify-content:center; margin-top:14px;" disabled>اختر ملاحظة أولاً</button>`;
+}
+
+function drawBehaviorPage() {
+  const st = behState;
+  const ca = document.getElementById("contentArea");
+  const back = `
+    <button class="btn-back no-print" onclick="openClass('${st.classId}', '${escapeAttr(st.classTitle)}')">${icon("back", 15)} رجوع للفصل</button>
+    <div class="breadcrumb-nav"><span class="crumb" onclick="renderClassesSection()">سجل المتابعة</span><span>/</span><span class="crumb" onclick="openClass('${st.classId}', '${escapeAttr(st.classTitle)}')">${escapeHtml(st.classTitle)}</span><span>/</span><span class="crumb current">الملاحظات السلوكية</span></div>`;
+  if (!st.students.length) { ca.innerHTML = back + `<div class="section-card"><div class="empty-state">ما فيه طلاب بهذا الفصل</div></div>`; return; }
+
+  const rows = st.students.map((x) => {
+    const c = behCounts(x.id);
+    return `<div class="beh-student-row ${x.id === st.selStudent ? "sel" : ""}" data-beh-stu="${x.id}"><div class="beh-av">${escapeHtml((x.full_name || "?").charAt(0))}</div><div class="beh-name">${escapeHtml(x.full_name)}</div><span class="beh-cnt pos">+${c.pos}</span><span class="beh-cnt neg">−${c.neg}</span></div>`;
+  }).join("");
+  const logRows = st.notes.filter((n) => st.logFilter === "all" || n.note_type === st.logFilter).slice(0, 40).map((n) =>
+    `<div class="beh-log-row"><span class="dot-badge ${n.note_type}"></span><b>${escapeHtml(behStudentName(n.student_id))}</b><span style="flex:1;">— ${escapeHtml(n.note)}</span><span class="beh-date">${new Date(n.created_at).toLocaleDateString("ar-SA")}</span><button type="button" class="icon-btn danger" data-beh-del="${n.id}" title="حذف">${icon("trash", 14)}</button></div>`).join("") || `<div class="empty-state">ما فيه ملاحظات</div>`;
+
+  ca.innerHTML = `${back}
+    <div class="period-toggle"><button data-beh-mode="student" class="${st.mode === "student" ? "active" : ""}">حسب الطالب</button><button data-beh-mode="note" class="${st.mode === "note" ? "active" : ""}">حسب الملاحظة (جماعي)</button></div>
+    <div class="beh-flash" id="behFlash">${escapeHtml(st.flash || "")}</div>
+    ${st.mode === "student"
+      ? `<div class="beh-layout"><div class="section-card" style="padding:14px;"><div class="section-head"><h3>الطلاب</h3></div>${rows}</div><div class="section-card">${behStudentPanelHtml()}</div></div>`
+      : `<div class="section-card">${behBatchPanelHtml()}</div>`}
+    <div class="section-card" style="margin-top:18px;">
+      <div class="section-head"><h3>سجل الملاحظات</h3>
+        <div class="period-toggle" style="margin-bottom:0;"><button data-beh-filter="all" class="${st.logFilter === "all" ? "active" : ""}">الكل</button><button data-beh-filter="positive" class="${st.logFilter === "positive" ? "active" : ""}">إيجابية</button><button data-beh-filter="negative" class="${st.logFilter === "negative" ? "active" : ""}">سلبية</button></div>
+      </div>${logRows}
+    </div>`;
+
+  ca.querySelectorAll("[data-beh-mode]").forEach((b) => b.addEventListener("click", () => { st.mode = b.dataset.behMode; drawBehaviorPage(); }));
+  ca.querySelectorAll("[data-beh-filter]").forEach((b) => b.addEventListener("click", () => { st.logFilter = b.dataset.behFilter; drawBehaviorPage(); }));
+  ca.querySelectorAll("[data-beh-stu]").forEach((r) => r.addEventListener("click", () => { st.selStudent = r.dataset.behStu; drawBehaviorPage(); }));
+  ca.querySelectorAll("[data-beh-type]").forEach((b) => b.addEventListener("click", () => { st.type = b.dataset.behType; drawBehaviorPage(); }));
+  ca.querySelectorAll("[data-beh-del]").forEach((b) => b.addEventListener("click", async () => {
+    if (!confirm("متأكد تبي تحذف هذي الملاحظة؟")) return;
+    const { error } = await supabaseClient.from("behavior_notes").delete().eq("id", b.dataset.behDel);
+    if (error) { alert("تعذر الحذف"); return; }
+    await behReloadNotes();
+    st.flash = "تم الحذف";
+    drawBehaviorPage();
+  }));
+
+  if (st.mode === "student") {
+    ca.querySelectorAll("[data-beh-add]").forEach((b) => b.addEventListener("click", async () => {
+      const presets = st.type === "positive" ? POSITIVE_NOTES : NEGATIVE_NOTES;
+      const text = presets[parseInt(b.dataset.behAdd, 10)];
+      await behAddNotes([{ student_id: st.selStudent, note_type: st.type, note: text, session_id: null }], `تم تسجيل: ${text} ✓`);
+    }));
+    const input = document.getElementById("behCustomInput");
+    const doCustom = async () => {
+      const text = input.value.trim();
+      if (!text) return;
+      await behAddNotes([{ student_id: st.selStudent, note_type: st.type, note: text, session_id: null }], `تم تسجيل: ${text} ✓`);
+    };
+    document.getElementById("behCustomAdd").addEventListener("click", doCustom);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doCustom(); } });
+  } else {
+    const customEl = document.getElementById("behBatchCustom");
+    customEl.value = st.batchCustom || "";
+    ca.querySelectorAll("[data-beh-btype]").forEach((b) => b.addEventListener("click", () => { st.batchType = b.dataset.behBtype; st.batchNote = null; drawBehaviorPage(); }));
+    ca.querySelectorAll("[data-beh-bnote]").forEach((b) => b.addEventListener("click", () => {
+      const i = parseInt(b.dataset.behBnote, 10);
+      st.batchNote = st.batchNote === i ? null : i;
+      st.batchCustom = ""; customEl.value = "";
+      ca.querySelectorAll("[data-beh-bnote]").forEach((x) => x.classList.toggle("selected", parseInt(x.dataset.behBnote, 10) === st.batchNote));
+      behUpdateBatchBtn();
+    }));
+    customEl.addEventListener("input", () => {
+      st.batchCustom = customEl.value;
+      if (customEl.value.trim()) { st.batchNote = null; ca.querySelectorAll("[data-beh-bnote]").forEach((x) => x.classList.remove("selected")); }
+      behUpdateBatchBtn();
+    });
+    ca.querySelectorAll("[data-beh-bstu]").forEach((b) => b.addEventListener("click", () => {
+      const id = b.dataset.behBstu;
+      if (st.batchStudents.has(id)) st.batchStudents.delete(id); else st.batchStudents.add(id);
+      b.classList.toggle("on", st.batchStudents.has(id));
+      behUpdateBatchBtn();
+    }));
+    document.getElementById("behBatchAll").addEventListener("click", () => {
+      const all = st.batchStudents.size === st.students.length;
+      st.batchStudents = all ? new Set() : new Set(st.students.map((x) => x.id));
+      ca.querySelectorAll("[data-beh-bstu]").forEach((x) => x.classList.toggle("on", st.batchStudents.has(x.dataset.behBstu)));
+      behUpdateBatchBtn();
+    });
+    document.getElementById("behBatchSave").addEventListener("click", async () => {
+      const text = behBatchText();
+      if (!text || !st.batchStudents.size) return;
+      const ids = Array.from(st.batchStudents);
+      const rows2 = ids.map((id) => ({ student_id: id, note_type: st.batchType, note: text, session_id: null }));
+      await behAddNotes(rows2, `تم تسجيل «${text}» على ${ids.length} ${ids.length === 1 ? "طالب" : "طلاب"} ✓`, () => { st.batchNote = null; st.batchCustom = ""; st.batchStudents = new Set(); });
+    });
+    behUpdateBatchBtn();
+  }
+  if (st.flash) setTimeout(() => { const f = document.getElementById("behFlash"); if (f) f.textContent = ""; st.flash = ""; }, 3000);
 }

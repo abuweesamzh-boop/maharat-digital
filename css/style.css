@@ -308,6 +308,38 @@ body { font-family: var(--font-body); background: var(--bg-deep); color: var(--t
 }
 .toolbar-icon-btn:hover { border-color: var(--navy); color: var(--navy); }
 
+/* ===== صفحة الملاحظات السلوكية ===== */
+.beh-layout { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 18px; align-items: start; }
+@media (max-width: 800px) { .beh-layout { grid-template-columns: 1fr; } }
+.beh-student-row { display: flex; align-items: center; gap: 10px; border: 1.5px solid var(--border-soft); border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; background: var(--bg-surface); transition: border-color 0.15s, background 0.15s; }
+.beh-student-row:hover { border-color: var(--navy); }
+.beh-student-row.sel { border-color: var(--navy); background: color-mix(in srgb, var(--navy) 8%, white); }
+.beh-av { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--navy), var(--gold)); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0; }
+.beh-name { flex: 1; font-weight: 700; font-size: 14px; }
+.beh-cnt { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 10px; }
+.beh-cnt.pos { background: rgba(31,168,115,0.13); color: var(--success); }
+.beh-cnt.neg { background: rgba(194,58,88,0.12); color: var(--danger); }
+.beh-big-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+.beh-big-btn { border: 2px solid transparent; border-radius: 14px; padding: 14px; font-weight: 800; font-family: var(--font-display); font-size: 15px; cursor: pointer; background: var(--bg-surface); transition: background 0.15s, color 0.15s; }
+.beh-big-btn.positive { color: var(--success); border-color: rgba(31,168,115,0.4); }
+.beh-big-btn.negative { color: var(--danger); border-color: rgba(194,58,88,0.4); }
+.beh-big-btn.positive.active { background: linear-gradient(135deg, #1FA873, #17855B); color: #fff; border-color: transparent; }
+.beh-big-btn.negative.active { background: linear-gradient(135deg, #E0607A, #C23A58); color: #fff; border-color: transparent; }
+.beh-hint { font-size: 12px; color: var(--text-muted); margin: 0 0 10px; }
+.beh-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.beh-pills .note-pill { font-size: 12.5px; padding: 9px 15px; }
+.beh-subtitle { font-size: 12px; font-weight: 800; color: var(--text-muted); margin: 16px 0 8px; }
+.beh-sums { display: flex; flex-wrap: wrap; gap: 7px; }
+.beh-sum { border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 700; }
+.beh-sum.positive { background: rgba(31,168,115,0.13); color: var(--success); }
+.beh-sum.negative { background: rgba(194,58,88,0.12); color: var(--danger); }
+.beh-log-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--border-soft); font-size: 13px; }
+.beh-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.beh-flash { min-height: 20px; font-size: 13px; font-weight: 700; color: var(--success); margin-bottom: 8px; }
+.beh-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.beh-stu-chip { border: 1.5px solid var(--border-soft); border-radius: 999px; padding: 8px 15px; font-size: 13px; font-weight: 600; cursor: pointer; background: var(--bg-surface); color: var(--text-primary); font-family: var(--font-body); transition: background 0.12s, color 0.12s; }
+.beh-stu-chip.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+
 @media print {
   .sidebar, .topbar .hamburger, .btn-add, .btn-secondary, .btn-back, .no-print, .period-toggle, .breadcrumb-nav { display: none !important; }
   .app-shell { display: block !important; }
