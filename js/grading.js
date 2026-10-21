@@ -703,7 +703,13 @@ async function deleteBehaviorNote(id) {
 
 let classReportCache = null;
 
+let reportEditMode = false;
+function reportOverrideKey(classId, period) { return "maharat_rep_edit_" + classId + "_" + period; }
+function loadReportOverrides(classId, period) { try { return JSON.parse(localStorage.getItem(reportOverrideKey(classId, period)) || "{}"); } catch (e) { return {}; } }
+function saveReportOverrides(classId, period, data) { try { if (Object.keys(data).length) localStorage.setItem(reportOverrideKey(classId, period), JSON.stringify(data)); else localStorage.removeItem(reportOverrideKey(classId, period)); } catch (e) {} }
+
 async function renderClassReport(classId, classTitle) {
+  reportEditMode = false;
   document.getElementById("pageTitle").textContent = `تقرير الرصد: ${classTitle}`;
   const contentArea = document.getElementById("contentArea");
   contentArea.innerHTML = `
@@ -711,10 +717,17 @@ async function renderClassReport(classId, classTitle) {
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
       <div class="period-toggle" id="reportClassPeriodToggle" style="margin-bottom:0;"><button data-p="p1" class="active">الفترة الأولى</button><button data-p="p2">الفترة الثانية</button></div>
       <div class="no-print" style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-secondary" style="width:auto; padding:10px 16px;" onclick="copyClassReportTable()">${icon("note", 15)} نسخ الجدول</button>
         <button class="btn-secondary" style="width:auto; padding:10px 16px;" onclick="printClassReportTable('${escapeAttr(classTitle)}')">${icon("print", 15)} طباعة (أفقي)</button>
         <button class="btn-secondary" style="width:auto; padding:10px 16px;" onclick="exportClassReportExcel('${escapeAttr(classTitle)}')">${icon("download", 15)} تصدير إكسل</button>
         <button class="btn-add" onclick="printAllStudentReports('${classId}', '${escapeAttr(classTitle)}')">${icon("print", 14)} طباعة تقارير كل الطلاب</button>
       </div>
+    </div>
+    <div class="rep-editbar no-print" id="repEditBar">
+      <button class="rep-edit-toggle" id="repEditToggle">${icon("edit", 15)} تعديل الدرجات</button>
+      <button class="rep-edit-tool" id="repRoundBtn" style="display:none;">تقريب للأعداد الصحيحة</button>
+      <button class="rep-edit-tool danger" id="repResetBtn" style="display:none;">إعادة الحساب التلقائي</button>
+      <span class="rep-edit-hint" id="repEditHint">التعديل هنا يخص التقرير فقط (للنسخ إلى نظام نور) ولا يغيّر الدرجات المسجلة في الحصص.</span>
     </div>
     <div class="section-card">
       <div class="grade-table-wrap"><table class="grade-table class-report-table" id="classReportTable">
@@ -732,7 +745,101 @@ async function renderClassReport(classId, classTitle) {
       loadClassReportBody(classId, period, classTitle);
     });
   });
+  document.getElementById("repEditToggle").addEventListener("click", () => setReportEditMode(!reportEditMode));
+  document.getElementById("repRoundBtn").addEventListener("click", () => {
+    if (!classReportCache) return;
+    const ov = loadReportOverrides(classReportCache.classId, classReportCache.period);
+    classReportCache.rowsData.forEach((r) => r.results.forEach((x, i) => {
+      const rounded = Math.round(x.avg);
+      if (rounded !== x.avg) { x.avg = rounded; (ov[r.student.id] = ov[r.student.id] || {})[i] = rounded; }
+    }));
+    classReportCache.rowsData.forEach((r) => { r.total = Math.round(r.results.reduce((sum, x) => sum + x.avg, 0) * 100) / 100; });
+    saveReportOverrides(classReportCache.classId, classReportCache.period, ov);
+    renderClassReportRows();
+  });
+  document.getElementById("repResetBtn").addEventListener("click", () => {
+    if (!classReportCache || !confirm("إلغاء كل التعديلات والرجوع للحساب التلقائي؟")) return;
+    saveReportOverrides(classReportCache.classId, classReportCache.period, {});
+    loadClassReportBody(classReportCache.classId, classReportCache.period, classReportCache.classTitle);
+  });
   await loadClassReportBody(classId, period, classTitle);
+}
+
+function setReportEditMode(on) {
+  reportEditMode = on;
+  const t = document.getElementById("repEditToggle");
+  if (t) { t.classList.toggle("on", on); t.innerHTML = on ? icon("check", 15) + " إنهاء التعديل" : icon("edit", 15) + " تعديل الدرجات"; hydrateIcons(t); }
+  const r = document.getElementById("repRoundBtn"); if (r) r.style.display = on ? "" : "none";
+  renderClassReportRows();
+}
+
+function reportHasEdits() {
+  if (!classReportCache) return false;
+  return Object.keys(loadReportOverrides(classReportCache.classId, classReportCache.period)).length > 0;
+}
+
+function renderClassReportRows() {
+  const body = document.getElementById("classReportBody");
+  if (!body || !classReportCache) return;
+  const { classId, classTitle, rowsData, period } = classReportCache;
+  const ov = loadReportOverrides(classId, period);
+  const resetBtn = document.getElementById("repResetBtn");
+  if (resetBtn) resetBtn.style.display = Object.keys(ov).length ? "" : "none";
+  const cell = (r, i) => {
+    const edited = ov[r.student.id] && ov[r.student.id][i] !== undefined;
+    if (reportEditMode) return `<td class="${edited ? "rep-edited" : ""}"><input type="number" class="rep-input" data-s="${r.student.id}" data-i="${i}" min="0" max="${r.results[i].target}" step="0.5" value="${r.results[i].avg}" onclick="event.stopPropagation()" /></td>`;
+    return `<td class="${edited ? "rep-edited" : ""}">${r.results[i].avg}</td>`;
+  };
+  body.innerHTML = rowsData.map((r) => {
+    const { continuousTotal, examsTotal } = calcSubtotals(r.results);
+    const rowClick = reportEditMode ? "" : `onclick="openStudentReport('${r.student.id}', '${escapeAttr(r.student.full_name)}', {id:'${classId}', title:'${escapeAttr(classTitle)}'})" style="cursor:pointer;"`;
+    return `
+    <tr data-s="${r.student.id}" ${rowClick}>
+      <td class="student-name-cell">${escapeHtml(r.student.full_name)}</td>
+      ${cell(r, 0)}${cell(r, 1)}${cell(r, 2)}${cell(r, 3)}
+      <td style="font-weight:700;" data-sub="cont">${continuousTotal}</td>
+      ${cell(r, 4)}${cell(r, 5)}
+      <td style="font-weight:700;" data-sub="exam">${examsTotal}</td>
+      <td style="font-weight:700; color:var(--navy);" data-sub="total">${r.total}</td>
+    </tr>`;
+  }).join("");
+  if (reportEditMode) {
+    body.querySelectorAll(".rep-input").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        const row = classReportCache.rowsData.find((x) => x.student.id === inp.dataset.s);
+        const i = parseInt(inp.dataset.i, 10);
+        let v = parseFloat(inp.value);
+        if (isNaN(v)) return;
+        v = Math.max(0, Math.min(row.results[i].target, v));
+        row.results[i].avg = v;
+        row.total = Math.round(row.results.reduce((sum, x) => sum + x.avg, 0) * 100) / 100;
+        const ovs = loadReportOverrides(classReportCache.classId, classReportCache.period);
+        if (v === row.results[i].orig) { if (ovs[row.student.id]) { delete ovs[row.student.id][i]; if (!Object.keys(ovs[row.student.id]).length) delete ovs[row.student.id]; } }
+        else (ovs[row.student.id] = ovs[row.student.id] || {})[i] = v;
+        saveReportOverrides(classReportCache.classId, classReportCache.period, ovs);
+        inp.parentElement.classList.toggle("rep-edited", v !== row.results[i].orig);
+        const { continuousTotal, examsTotal } = calcSubtotals(row.results);
+        const tr = inp.closest("tr");
+        tr.querySelector('[data-sub="cont"]').textContent = continuousTotal;
+        tr.querySelector('[data-sub="exam"]').textContent = examsTotal;
+        tr.querySelector('[data-sub="total"]').textContent = row.total;
+        const rb = document.getElementById("repResetBtn"); if (rb) rb.style.display = Object.keys(ovs).length ? "" : "none";
+      });
+    });
+  }
+}
+
+function copyClassReportTable() {
+  if (!classReportCache) return;
+  const lines = [["الطالب", "المشاركة", "الواجبات", "المهام الأدائية", "التطبيق العملي", "المجموع (40)", "التحريري", "العملي", "المجموع (60)", "الإجمالي"].join("\t")];
+  classReportCache.rowsData.forEach((r) => {
+    const { continuousTotal, examsTotal } = calcSubtotals(r.results);
+    lines.push([r.student.full_name, r.results[0].avg, r.results[1].avg, r.results[2].avg, r.results[3].avg, continuousTotal, r.results[4].avg, r.results[5].avg, examsTotal, r.total].join("\t"));
+  });
+  const text = lines.join("\n");
+  const done = () => alert("تم نسخ الجدول — الصقه مباشرة في إكسل أو أي جدول.");
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => alert("تعذر النسخ تلقائياً، استخدم تصدير إكسل."));
+  else alert("المتصفح لا يدعم النسخ المباشر، استخدم تصدير إكسل.");
 }
 
 async function loadClassReportBody(classId, period, classTitle) {
@@ -742,21 +849,18 @@ async function loadClassReportBody(classId, period, classTitle) {
   if (!students || students.length === 0) { body.innerHTML = `<tr><td colspan="10" class="empty-state">ما فيه طلاب بهذا الفصل</td></tr>`; return; }
   const rowsData = await Promise.all(students.map(async (st) => {
     const r = await fetchStudentResults(st.id, period);
+    r.results.forEach((x) => { x.orig = x.avg; });
     return { student: st, results: r.results, total: r.total };
   }));
+  const ov = loadReportOverrides(classId, period);
+  rowsData.forEach((r) => {
+    const o = ov[r.student.id];
+    if (!o) return;
+    Object.keys(o).forEach((i) => { r.results[i].avg = o[i]; });
+    r.total = Math.round(r.results.reduce((sum, x) => sum + x.avg, 0) * 100) / 100;
+  });
   classReportCache = { classId, period, classTitle, rowsData };
-  body.innerHTML = rowsData.map((r) => {
-    const { continuousTotal, examsTotal } = calcSubtotals(r.results);
-    return `
-    <tr style="cursor:pointer;" onclick="openStudentReport('${r.student.id}', '${escapeAttr(r.student.full_name)}', {id:'${classId}', title:'${escapeAttr(classTitle)}'})">
-      <td class="student-name-cell">${escapeHtml(r.student.full_name)}</td>
-      <td>${r.results[0].avg}</td><td>${r.results[1].avg}</td><td>${r.results[2].avg}</td><td>${r.results[3].avg}</td>
-      <td style="font-weight:700;">${continuousTotal}</td>
-      <td>${r.results[4].avg}</td><td>${r.results[5].avg}</td>
-      <td style="font-weight:700;">${examsTotal}</td>
-      <td style="font-weight:700; color:var(--navy);">${r.total}</td>
-    </tr>`;
-  }).join("");
+  renderClassReportRows();
 }
 
 function exportClassReportExcel(classTitle) {

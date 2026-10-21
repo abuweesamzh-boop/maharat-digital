@@ -5,6 +5,7 @@ async function renderClassesSection() {
   document.getElementById("pageTitle").textContent = "سجل المتابعة";
   const contentArea = document.getElementById("contentArea");
   contentArea.innerHTML = `
+    <div id="followDash"></div>
     <div class="section-card" style="margin-bottom:20px;">
       <div class="section-head"><h3>${icon("search")} بحث سريع عن طالب (كل الفصول)</h3></div>
       <input type="text" id="globalSearchInput" placeholder="اكتب اسم الطالب..." />
@@ -20,7 +21,132 @@ async function renderClassesSection() {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => globalStudentSearch(e.target.value), 300);
   });
+  hydrateIcons(contentArea);
+  renderFollowDash();
   await loadClasses();
+}
+
+/* ============ لوحة المتابعة (المتصدرون / المتميزون / المقصّرون) ============ */
+let dashPeriod = "p1", dashClassFilter = "all";
+const DASH_LEVELS = [
+  { key: "star", label: "متميز", range: "90% فأكثر", color: "#047857", min: 90 },
+  { key: "good", label: "جيد", range: "80% – 89%", color: "#0369A1", min: 80 },
+  { key: "mid", label: "يحتاج تحسين", range: "60% – 79%", color: "#B45309", min: 60 },
+  { key: "low", label: "مقصّر", range: "أقل من 60%", color: "#B91C1C", min: -1 },
+];
+const DASH_COMPS = [
+  { key: "participation", label: "المشاركة", target: 10 }, { key: "homework", label: "الواجبات", target: 10 },
+  { key: "tasks", label: "المهام الأدائية", target: 10 }, { key: "practical", label: "التطبيق العملي", target: 10 },
+  { key: "written", label: "الاختبار التحريري", target: 30 }, { key: "practical_exam", label: "الاختبار العملي", target: 30 },
+];
+
+async function fetchAllPages(build) {
+  let all = [], from = 0;
+  for (;;) {
+    const { data, error } = await build().range(from, from + 999);
+    if (error || !data) break;
+    all = all.concat(data);
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+  return all;
+}
+
+function dashLevelOf(pct) { return DASH_LEVELS.find((l) => pct >= l.min) || DASH_LEVELS[3]; }
+
+async function renderFollowDash() {
+  const holder = document.getElementById("followDash");
+  if (!holder) return;
+  const { data: classes } = await supabaseClient.from("classes").select("id, title").order("created_at", { ascending: true });
+  const clsList = classes || [];
+  if (clsList.length === 0) { holder.innerHTML = ""; return; }
+  holder.innerHTML = `
+    <div class="fd-wrap">
+      <div class="fd-head">
+        <div class="fd-title">${icon("chart", 18)} لوحة المتابعة</div>
+        <div class="fd-tools">
+          <select id="fdClass" class="fd-select"><option value="all">كل الفصول</option>${clsList.map((c) => `<option value="${c.id}" ${dashClassFilter === c.id ? "selected" : ""}>${escapeHtml(c.title)}</option>`).join("")}</select>
+          <div class="period-toggle" id="fdPeriod" style="margin:0;"><button data-p="p1" class="${dashPeriod === "p1" ? "active" : ""}">الفترة الأولى</button><button data-p="p2" class="${dashPeriod === "p2" ? "active" : ""}">الفترة الثانية</button></div>
+        </div>
+      </div>
+      <div id="fdBody"><div class="empty-state" style="padding:30px;">جاري حساب المستويات...</div></div>
+    </div>`;
+  hydrateIcons(holder);
+  document.getElementById("fdClass").addEventListener("change", (e) => { dashClassFilter = e.target.value; loadFollowDash(clsList); });
+  document.querySelectorAll("#fdPeriod button").forEach((b) => b.addEventListener("click", () => {
+    dashPeriod = b.dataset.p;
+    document.querySelectorAll("#fdPeriod button").forEach((x) => x.classList.toggle("active", x === b));
+    loadFollowDash(clsList);
+  }));
+  loadFollowDash(clsList);
+}
+
+async function loadFollowDash(clsList) {
+  const body = document.getElementById("fdBody");
+  if (!body) return;
+  body.innerHTML = `<div class="empty-state" style="padding:30px;">جاري حساب المستويات...</div>`;
+  const period = dashPeriod, filter = dashClassFilter;
+  const students = await fetchAllPages(() => supabaseClient.from("students").select("id, full_name, class_id").order("id", { ascending: true }));
+  const rows = await fetchAllPages(() => supabaseClient.from("session_scores")
+    .select("session_id, student_id, participation, homework, tasks, practical, exam_score, class_sessions!inner(session_kind, period, class_id)")
+    .eq("class_sessions.period", period).order("session_id", { ascending: true }).order("student_id", { ascending: true }));
+  if (period !== dashPeriod || filter !== dashClassFilter || !document.getElementById("fdBody")) return;
+  const clsMap = {}; clsList.forEach((c) => (clsMap[c.id] = c.title));
+  const byStudent = {};
+  rows.forEach((r) => { (byStudent[r.student_id] = byStudent[r.student_id] || []).push(r); });
+  const stats = [];
+  students.filter((st) => filter === "all" || st.class_id === filter).forEach((st) => {
+    const mine = byStudent[st.id] || [];
+    let total = 0, max = 0, weakest = null;
+    DASH_COMPS.forEach((comp) => {
+      const rel = mine.filter((r) => {
+        const kind = r.class_sessions && r.class_sessions.session_kind;
+        if (comp.key === "written") return kind === "written_exam";
+        if (comp.key === "practical_exam") return kind === "practical_exam";
+        return kind === "continuous";
+      });
+      const field = (comp.key === "written" || comp.key === "practical_exam") ? "exam_score" : comp.key;
+      const vals = rel.map((r) => r[field]).filter((v) => v !== null && v !== undefined);
+      if (!vals.length) return;
+      const avg = vals.reduce((a, b) => a + Number(b), 0) / vals.length;
+      total += avg; max += comp.target;
+      const ratio = avg / comp.target;
+      if (!weakest || ratio < weakest.ratio) weakest = { label: comp.label, ratio };
+    });
+    if (max > 0) stats.push({ id: st.id, name: st.full_name, cls: clsMap[st.class_id] || "", class_id: st.class_id, total: Math.round(total * 10) / 10, max, pct: Math.round((total / max) * 1000) / 10, weakest: weakest ? weakest.label : "" });
+  });
+  if (stats.length === 0) { body.innerHTML = `<div class="empty-state" style="padding:30px;">لا توجد درجات مرصودة في هذه الفترة بعد — ابدأ بإضافة حصة وتسجيل الدرجات.</div>`; return; }
+  stats.sort((a, b) => b.pct - a.pct);
+  const counts = {}; DASH_LEVELS.forEach((l) => (counts[l.key] = 0));
+  stats.forEach((s2) => { counts[dashLevelOf(s2.pct).key]++; });
+  const top = stats.slice(0, 5);
+  const lagging = stats.filter((s2) => s2.pct < 80).sort((a, b) => a.pct - b.pct).slice(0, 5);
+  const nameAttr = (s2) => `openStudentReport('${s2.id}', '${escapeAttr(s2.name)}', {id:'${s2.class_id}', title:'${escapeAttr(s2.cls)}'})`;
+  body.innerHTML = `
+    <div class="fd-tiles">
+      ${DASH_LEVELS.map((l) => `<div class="fd-tile" style="--fc:${l.color}"><div class="fd-tile-num">${counts[l.key]}</div><div class="fd-tile-lbl">${l.label}</div><div class="fd-tile-rng">${l.range}</div></div>`).join("")}
+    </div>
+    <div class="fd-bar">${DASH_LEVELS.map((l) => counts[l.key] ? `<span style="--fc:${l.color}; flex:${counts[l.key]}" title="${l.label}: ${counts[l.key]}"></span>` : "").join("")}</div>
+    <div class="fd-cols">
+      <div class="fd-panel">
+        <div class="fd-panel-head" style="--fc:#B45309">${icon("star", 16)} المتصدرون</div>
+        ${top.map((s2, i) => `<div class="fd-row" onclick="${nameAttr(s2)}">
+          <span class="fd-rank r${i + 1}">${i + 1}</span>
+          <div class="fd-info"><div class="fd-name">${escapeHtml(s2.name)}</div><div class="fd-sub">${escapeHtml(s2.cls)}</div></div>
+          <div class="fd-score"><b>${s2.pct}%</b><div class="fd-mini"><span style="width:${Math.min(100, s2.pct)}%; background:${dashLevelOf(s2.pct).color}"></span></div></div>
+        </div>`).join("")}
+      </div>
+      <div class="fd-panel">
+        <div class="fd-panel-head" style="--fc:#B91C1C">${icon("note", 16)} يحتاجون متابعة</div>
+        ${lagging.length === 0 ? `<div class="fd-allgood">${icon("check", 22)}<div>ممتاز! لا يوجد طلاب أقل من 80% في هذه الفترة.</div></div>` : lagging.map((s2) => `<div class="fd-row" onclick="${nameAttr(s2)}">
+          <span class="fd-rank low">!</span>
+          <div class="fd-info"><div class="fd-name">${escapeHtml(s2.name)}</div><div class="fd-sub">${escapeHtml(s2.cls)}${s2.weakest ? " · الأضعف: " + escapeHtml(s2.weakest) : ""}</div></div>
+          <div class="fd-score"><b style="color:${dashLevelOf(s2.pct).color}">${s2.pct}%</b><div class="fd-mini"><span style="width:${Math.max(4, s2.pct)}%; background:${dashLevelOf(s2.pct).color}"></span></div></div>
+        </div>`).join("")}
+      </div>
+    </div>
+    <div class="fd-note">النسبة محسوبة من المكوّنات التي رُصدت فعلاً (فالطالب لا يُحسب عليه اختبار لم يُعقد بعد). اضغط على أي طالب لفتح تقريره.</div>`;
+  hydrateIcons(body);
 }
 
 async function globalStudentSearch(query) {
