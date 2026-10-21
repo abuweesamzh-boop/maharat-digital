@@ -706,7 +706,42 @@ let classReportCache = null;
 let reportEditMode = false;
 function reportOverrideKey(classId, period) { return "maharat_rep_edit_" + classId + "_" + period; }
 function loadReportOverrides(classId, period) { try { return JSON.parse(localStorage.getItem(reportOverrideKey(classId, period)) || "{}"); } catch (e) { return {}; } }
-function saveReportOverrides(classId, period, data) { try { if (Object.keys(data).length) localStorage.setItem(reportOverrideKey(classId, period), JSON.stringify(data)); else localStorage.removeItem(reportOverrideKey(classId, period)); } catch (e) {} }
+let reportSyncOk = true, reportPushTimer = null;
+function saveReportOverrides(classId, period, data) {
+  try { if (Object.keys(data).length) localStorage.setItem(reportOverrideKey(classId, period), JSON.stringify(data)); else localStorage.removeItem(reportOverrideKey(classId, period)); } catch (e) {}
+  clearTimeout(reportPushTimer);
+  reportPushTimer = setTimeout(() => pushReportOverridesToDb(classId, period, data), 600);
+}
+function updateReportSyncHint() {
+  const h = document.getElementById("repEditHint");
+  if (!h) return;
+  h.textContent = reportSyncOk
+    ? "التعديل هنا يخص التقرير فقط (للنسخ إلى نظام نور) ولا يغيّر الدرجات المسجلة في الحصص. يُحفظ تلقائياً ويظهر على كل أجهزتك."
+    : "تنبيه: التعديلات محفوظة على هذا الجهاز فقط. شغّل أمر SQL الخاص بجدول report_overrides في Supabase لتظهر على الأجهزة الأخرى.";
+  h.style.color = reportSyncOk ? "" : "var(--danger)";
+}
+async function pushReportOverridesToDb(classId, period, data) {
+  try {
+    const del = await supabaseClient.from("report_overrides").delete().eq("class_id", classId).eq("period", period);
+    if (del.error) throw del.error;
+    const rows = [];
+    Object.keys(data).forEach((sid) => Object.keys(data[sid]).forEach((i) => rows.push({ class_id: classId, period, student_id: sid, comp_index: parseInt(i, 10), value: data[sid][i] })));
+    if (rows.length) { const ins = await supabaseClient.from("report_overrides").insert(rows); if (ins.error) throw ins.error; }
+    reportSyncOk = true;
+  } catch (e) { reportSyncOk = false; }
+  updateReportSyncHint();
+}
+async function pullReportOverridesFromDb(classId, period) {
+  try {
+    const { data, error } = await supabaseClient.from("report_overrides").select("*").eq("class_id", classId).eq("period", period);
+    if (error) throw error;
+    const ov = {};
+    (data || []).forEach((r) => { (ov[r.student_id] = ov[r.student_id] || {})[r.comp_index] = Number(r.value); });
+    try { if (Object.keys(ov).length) localStorage.setItem(reportOverrideKey(classId, period), JSON.stringify(ov)); else localStorage.removeItem(reportOverrideKey(classId, period)); } catch (e) {}
+    reportSyncOk = true;
+  } catch (e) { reportSyncOk = false; }
+  updateReportSyncHint();
+}
 
 async function renderClassReport(classId, classTitle) {
   reportEditMode = false;
@@ -852,6 +887,7 @@ async function loadClassReportBody(classId, period, classTitle) {
     r.results.forEach((x) => { x.orig = x.avg; });
     return { student: st, results: r.results, total: r.total };
   }));
+  await pullReportOverridesFromDb(classId, period);
   const ov = loadReportOverrides(classId, period);
   rowsData.forEach((r) => {
     const o = ov[r.student.id];
