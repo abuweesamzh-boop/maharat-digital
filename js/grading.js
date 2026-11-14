@@ -102,6 +102,7 @@ async function loadGradingKinds() {
               <div class="sess-date">${s.session_date ? new Date(String(s.session_date).slice(0, 10) + "T00:00:00").toLocaleDateString("ar-SA") : "بدون تاريخ"}${s.session_date ? " · " + weekdayNameFromDate(String(s.session_date).slice(0, 10)) : ""}</div>
             </div>
             <div class="sess-actions">
+              <span class="sess-act move" title="${gradingPeriod === "p1" ? "نقل إلى الفترة الثانية" : "نقل إلى الفترة الأولى"}" onclick="event.stopPropagation(); moveSessionToOtherPeriod('${s.id}', '${kind}')">${icon("swap", 13)}</span>
               <span class="sess-act" title="تعديل" onclick="event.stopPropagation(); openEditSessionModal('${s.id}', '${kind}')">${icon("edit", 13)}</span>
               <span class="sess-act danger" title="حذف" onclick="event.stopPropagation(); deleteSession('${s.id}')">${icon("close", 13)}</span>
             </div>
@@ -150,6 +151,22 @@ async function createSession(kind) {
     document.getElementById("modalOverlay").classList.remove("show");
     openSessionGrid(newSession.id, kind, nextNumber);
   };
+}
+
+async function moveSessionToOtherPeriod(sessionId, kind) {
+  const from = gradingPeriod, to = from === "p1" ? "p2" : "p1";
+  const names = { p1: "الفترة الأولى", p2: "الفترة الثانية" };
+  const label = kind === "continuous" ? "الحصة" : "الاختبار";
+  const { data: sess } = await supabaseClient.from("class_sessions").select("*").eq("id", sessionId).single();
+  if (!sess) { alert("تعذر العثور على السجل."); return; }
+  const what = `${label} ${sess.session_number}${sess.lesson_title ? " (" + sess.lesson_title + ")" : ""}`;
+  if (!confirm(`نقل ${what} من ${names[from]} إلى ${names[to]}؟\nستنتقل معها كل درجاتها، وتأخذ رقماً جديداً في ${names[to]}.`)) return;
+  const { data: last } = await supabaseClient.from("class_sessions").select("session_number").eq("class_id", sess.class_id).eq("period", to).eq("session_kind", kind).order("session_number", { ascending: false }).limit(1);
+  const nextNumber = last && last.length > 0 ? last[0].session_number + 1 : 1;
+  const { error } = await supabaseClient.from("class_sessions").update({ period: to, session_number: nextNumber }).eq("id", sessionId);
+  if (error) { alert("تعذر النقل: " + error.message); return; }
+  await loadGradingKinds();
+  if (typeof loadClassCounts === "function") loadClassCounts(sess.class_id);
 }
 
 async function deleteSession(sessionId) {
@@ -761,6 +778,7 @@ async function renderClassReport(classId, classTitle) {
     <div class="rep-editbar no-print" id="repEditBar">
       <button class="rep-edit-toggle" id="repEditToggle">${icon("edit", 15)} تعديل الدرجات</button>
       <button class="rep-edit-tool" id="repRoundBtn" style="display:none;">تقريب للأعداد الصحيحة</button>
+      <button class="rep-edit-tool bonus" id="repBonusBtn">${icon("plus", 14)} درجات تعويضية للجميع</button>
       <button class="rep-edit-tool danger" id="repResetBtn" style="display:none;">إعادة الحساب التلقائي</button>
       <span class="rep-edit-hint" id="repEditHint">التعديل هنا يخص التقرير فقط (للنسخ إلى نظام نور) ولا يغيّر الدرجات المسجلة في الحصص.</span>
     </div>
@@ -792,12 +810,56 @@ async function renderClassReport(classId, classTitle) {
     saveReportOverrides(classReportCache.classId, classReportCache.period, ov);
     renderClassReportRows();
   });
+  document.getElementById("repBonusBtn").addEventListener("click", () => openBonusModal());
   document.getElementById("repResetBtn").addEventListener("click", () => {
     if (!classReportCache || !confirm("إلغاء كل التعديلات والرجوع للحساب التلقائي؟")) return;
     saveReportOverrides(classReportCache.classId, classReportCache.period, {});
     loadClassReportBody(classReportCache.classId, classReportCache.period, classReportCache.classTitle);
   });
   await loadClassReportBody(classId, period, classTitle);
+}
+
+const BONUS_COMPS = [
+  { i: 0, label: "المشاركة", max: 10 }, { i: 1, label: "الواجبات", max: 10 },
+  { i: 2, label: "المهام الأدائية", max: 10 }, { i: 3, label: "التطبيق العملي", max: 10 },
+  { i: 4, label: "الاختبار التحريري", max: 30 }, { i: 5, label: "الاختبار العملي", max: 30 },
+];
+function openBonusModal() {
+  if (!classReportCache) return;
+  document.getElementById("modalTitle").textContent = "درجات تعويضية لجميع الطلاب";
+  document.getElementById("modalFields").innerHTML = `
+    <div class="field"><label>الدرجة التي تُضاف لكل طالب</label><input type="number" id="bn_val" step="0.5" min="0" max="30" placeholder="مثال: 2" /></div>
+    <div class="field"><label>تُضاف إلى</label>
+      <div class="bonus-checks">${BONUS_COMPS.map((c) => `<label class="bonus-check"><input type="checkbox" class="bn_comp" value="${c.i}" /> ${c.label} <span>(من ${c.max})</span></label>`).join("")}</div>
+      <div style="margin-top:8px;"><button type="button" class="rep-edit-tool" id="bn_all">تحديد الكل</button></div>
+    </div>
+    <p style="color:var(--text-muted); font-size:11.5px; line-height:1.9;">تُضاف الدرجة على المتوسط الحالي لكل طالب في الخانات المحددة، ولا تتجاوز الدرجة العظمى للخانة. تظهر الخانات المعدّلة باللون الأصفر ويمكن التراجع بزر «إعادة الحساب التلقائي». لا تضغط التطبيق مرتين وإلا ستُضاف مرتين.</p>`;
+  document.getElementById("modalOverlay").classList.add("show");
+  document.getElementById("bn_all").onclick = () => document.querySelectorAll(".bn_comp").forEach((c) => (c.checked = true));
+  document.getElementById("modalCancel").onclick = () => document.getElementById("modalOverlay").classList.remove("show");
+  document.getElementById("modalForm").onsubmit = (e) => {
+    e.preventDefault();
+    const v = parseFloat(document.getElementById("bn_val").value);
+    const comps = Array.from(document.querySelectorAll(".bn_comp:checked")).map((c) => parseInt(c.value, 10));
+    if (isNaN(v) || v <= 0) { alert("اكتب الدرجة التعويضية."); return; }
+    if (!comps.length) { alert("اختر خانة واحدة على الأقل."); return; }
+    const { classId, period, rowsData } = classReportCache;
+    const ov = loadReportOverrides(classId, period);
+    rowsData.forEach((r) => {
+      comps.forEach((i) => {
+        const x = r.results[i];
+        const nv = Math.min(x.target, Math.round((x.avg + v) * 100) / 100);
+        x.avg = nv;
+        if (nv === x.orig) { if (ov[r.student.id]) delete ov[r.student.id][i]; }
+        else (ov[r.student.id] = ov[r.student.id] || {})[i] = nv;
+        if (ov[r.student.id] && !Object.keys(ov[r.student.id]).length) delete ov[r.student.id];
+      });
+      r.total = Math.round(r.results.reduce((sum, x) => sum + x.avg, 0) * 100) / 100;
+    });
+    saveReportOverrides(classId, period, ov);
+    document.getElementById("modalOverlay").classList.remove("show");
+    renderClassReportRows();
+  };
 }
 
 function setReportEditMode(on) {

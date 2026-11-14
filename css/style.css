@@ -515,6 +515,14 @@ body { font-family: var(--font-body); background: var(--bg-deep); color: var(--t
 .rep-input:focus { border-color: var(--navy); outline: none; box-shadow: 0 0 0 3px rgba(67,56,202,0.14); }
 .grade-table td.rep-edited { background: #FEF3C7; font-weight: 700; }
 
+.sess-act.move:hover { color: var(--navy); background: #EEF0FF; }
+
+.rep-edit-tool.bonus { background: #ECFDF5; color: #047857; border-color: #A7F3D0; display: inline-flex; align-items: center; gap: 6px; }
+.bonus-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bonus-check { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border: 1px solid var(--border-soft); border-radius: 10px; font-size: 13px; cursor: pointer; background: #fff; }
+.bonus-check input { width: auto !important; margin: 0; }
+.bonus-check span { color: var(--text-muted); font-size: 11.5px; }
+
 @media print {
   .sidebar, .topbar .hamburger, .btn-add, .btn-secondary, .btn-back, .no-print, .period-toggle, .breadcrumb-nav { display: none !important; }
   .app-shell { display: block !important; }
